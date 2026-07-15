@@ -352,7 +352,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 return LobbyOperationResult<LobbyIniciarJogoResponse>.Conflict("Todos os jogadores que não são o criador devem estar prontos.");
             }
 
-            var gameSessionResult = _gameSessionService.CreateCatanSessionFromRoom(new RoomGameStartContext
+            var gameSessionResult = _gameSessionService.CreateGameSessionFromRoom(new RoomGameStartContext
             {
                 SalaId = sala.SalaId,
                 GameType = sala.GameType,

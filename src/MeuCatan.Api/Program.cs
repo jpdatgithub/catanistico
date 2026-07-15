@@ -15,7 +15,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddSingleton<ILobbyGameCatalogService, LobbyGameCatalogService>();
-builder.Services.AddSingleton<IGameSessionService, GameSessionService>();
+builder.Services.AddSingleton<IGameSessionService, CatanGameSessionService>();
 builder.Services.AddSingleton<ILobbyRoomService, LobbyRoomService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"]

@@ -1,0 +1,25 @@
+@namespace MeuCatan.MudblazorWasmClient.Components.Catan
+@using System.Globalization
+
+@* Glow: linha mais grossa e semi-transparente atrás *@
+<line x1="@F(X1)" y1="@F(Y1)" x2="@F(X2)" y2="@F(Y2)" stroke="@Color" stroke-width="@F(StrokeWidth * 2.8)"
+      stroke-linecap="round" stroke-opacity="0.3" />
+
+@* Core: linha sólida na frente *@
+<line x1="@F(X1)" y1="@F(Y1)" x2="@F(X2)" y2="@F(Y2)" stroke="@Color" stroke-width="@F(StrokeWidth)"
+      stroke-linecap="round" />
+
+@code {
+    [Parameter] public double X1 { get; set; }
+    [Parameter] public double Y1 { get; set; }
+    [Parameter] public double X2 { get; set; }
+    [Parameter] public double Y2 { get; set; }
+
+    /// <summary>Cor da aresta destacada (padrão: dourado).</summary>
+    [Parameter] public string Color { get; set; } = "#FFD700";
+
+    /// <summary>Espessura da linha principal. O brilho usa 2.8× essa espessura.</summary>
+    [Parameter] public double StrokeWidth { get; set; } = 6;
+
+    private static string F(double v) => v.ToString("F2", CultureInfo.InvariantCulture);
+}

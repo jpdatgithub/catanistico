@@ -12,8 +12,7 @@ else
     var transform = $"translate({F(_tx)},{F(_ty)}) scale({F(_scale)})";
     var cursor = _isDragging ? "grabbing" : "grab";
 
-    <div @ref="_containerRef"
-         style="width:100%; height:@(DisplayHeight)px; overflow:hidden; user-select:none; cursor:@cursor;"
+    <div @ref="_containerRef" style="width:100%; height:@(DisplayHeight)px; overflow:hidden; user-select:none;"
          @onmousemove="OnMouseMove" @onmouseup="OnMouseUp" @onmouseleave="OnMouseUp">
         <svg width="100%" height="100%" class="catan-board-svg" role="img" aria-label="Tabuleiro do Catan"
              style="display:block;" @onwheel="OnWheel" @onwheel:preventDefault @onmousedown="OnMouseDown">
@@ -22,6 +21,7 @@ else
                 {
                     <polygon points="@tile.Points" fill="@tile.Fill" stroke="#2f2f2f" stroke-width="2" />
                 }
+
             </g>
         </svg>
     </div>

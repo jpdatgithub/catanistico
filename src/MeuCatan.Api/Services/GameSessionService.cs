@@ -1,29 +1,36 @@
+using System.Runtime.InteropServices;
 using MeuCatan.ClassLib.Contracts;
 
 namespace MeuCatan.Api.Services;
 
 public interface IGameSessionService
 {
-    LobbyOperationResult<GameSessionResponse> CreateCatanSessionFromRoom(RoomGameStartContext roomContext);
+    LobbyOperationResult<GameSessionResponse> CreateGameSessionFromRoom(RoomGameStartContext roomContext);
     LobbyOperationResult<GameSessionResponse> GetSession(int salaId, int usuarioId);
 }
 
-public sealed class GameSessionService : IGameSessionService
+public sealed class CatanGameSessionService : IGameSessionService
 {
     private static readonly string[] PlayerColors = ["vermelho", "azul", "branco", "laranja"];
-    private static readonly (int X, int Y, int Z)[] DefaultTileCubeCoordinates =
+
+    private static readonly (int X, int Y, int Z)[] OrderedOuterCoordinates =
     [
-        (0, 2, -2), (1, 1, -2), (2, 0, -2),
-        (-1, 2, -1), (0, 1, -1), (1, 0, -1), (2, -1, -1),
-        (-2, 2, 0), (-1, 1, 0), (0, 0, 0), (1, -1, 0), (2, -2, 0),
-        (-2, 1, 1), (-1, 0, 1), (0, -1, 1), (1, -2, 1),
-        (-2, 0, 2), (-1, -1, 2), (0, -2, 2)
+        (-2, 2, 0), (-1, 2, -1), (0, 2, -2), (1, 1, -2), (2, 0, -2), (2, -1, -1), (2, -2, 0), (1, -2, 1), (0, -2, 2), (-1, -1, 2), (-2, 0, 2), (-2, 1, 1)
+    ];
+    private static readonly (int X, int Y, int Z)[] OrderedMiddleCoordinates =
+    [
+        (-1, 1, 0), (0, 1, -1), (1, 0, -1), (1, -1, 0), (0, -1, 1), (-1, 0, 1)
+    ];
+
+    private static readonly int[] ThreeToFourOrderedNumberTokens =
+    [
+        5, 2, 6, 3, 8, 10, 9, 12, 11, 4, 8, 10, 9, 4, 5, 6, 3, 11
     ];
 
     private readonly Lock _lock = new();
     private readonly Dictionary<int, CatanGameSessionState> _sessions = [];
 
-    public LobbyOperationResult<GameSessionResponse> CreateCatanSessionFromRoom(RoomGameStartContext roomContext)
+    public LobbyOperationResult<GameSessionResponse> CreateGameSessionFromRoom(RoomGameStartContext roomContext)
     {
         if (!string.Equals(roomContext.GameType, LobbyTipoJogo.CatanBase, StringComparison.OrdinalIgnoreCase))
         {
@@ -61,7 +68,7 @@ public sealed class GameSessionService : IGameSessionService
                         Resources = new Dictionary<string, int>()
                     })
                     .ToList(),
-                Board = CreateBoardState()
+                Board = Create34TraditionalBoardState()
             };
 
             session.CurrentPlayerId = session.SetupTurnOrder.First();
@@ -98,49 +105,58 @@ public sealed class GameSessionService : IGameSessionService
         return [.. playerIds, .. reverse];
     }
 
-    private static CatanBoardState CreateBoardState()
+    private static CatanBoardState Create34TraditionalBoardState()
     {
-        var tileDefinitions = new (string ResourceType, int NumberToken)[]
+        var recursos = new List<string>();
+        for (int i = 0; i < 4; i++)
         {
-            ("madeira", 11),
-            ("argila", 12),
-            ("ovelha", 9),
-            ("trigo", 4),
-            ("pedra", 6),
-            ("madeira", 5),
-            ("ovelha", 10),
-            ("trigo", 3),
-            ("argila", 8),
-            ("deserto", 0),
-            ("pedra", 8),
-            ("madeira", 3),
-            ("trigo", 4),
-            ("ovelha", 5),
-            ("pedra", 6),
-            ("madeira", 9),
-            ("argila", 10),
-            ("trigo", 11),
-            ("ovelha", 2)
-        };
+            recursos.Add("madeira");
+            recursos.Add("ovelha");
+            recursos.Add("trigo");
+            if (i < 3)
+            {
+                recursos.Add("argila");
+                recursos.Add("pedra");
+            }
+            if (i == 0)
+            {
+                recursos.Add("deserto");
+            }
+        }
+
+        Random.Shared.Shuffle(CollectionsMarshal.AsSpan(recursos));
+
+        var indiceDeserto = recursos.IndexOf("deserto");
+
+        var numberTokens = ThreeToFourOrderedNumberTokens.ToList();
+        numberTokens.Insert(indiceDeserto, 7);
+
+        var start = Random.Shared.Next(6);
+
+        var OrderedTiles = new List<(int X, int Y, int Z)>();
+        var rotatedOuter = OrderedOuterCoordinates.Skip(2 * start).Concat(OrderedOuterCoordinates.Take(2 * start));
+        var rotatedInner = OrderedMiddleCoordinates.Skip(start).Concat(OrderedMiddleCoordinates.Take(start));
+
+        OrderedTiles.AddRange(rotatedOuter);
+        OrderedTiles.AddRange(rotatedInner);
+        OrderedTiles.Add((0, 0, 0));
+
+        var tiles = OrderedTiles
+            .Select((hexagon, index) => new CatanTileState
+            {
+                TileId = index + 1,
+                ResourceType = recursos[index],
+                NumberToken = numberTokens[index],
+                CubeX = hexagon.X,
+                CubeY = hexagon.Y,
+                CubeZ = hexagon.Z
+            })
+            .ToList();
 
         return new CatanBoardState
         {
             RobberTileId = 10,
-            Tiles = tileDefinitions
-                .Select((tile, index) =>
-                {
-                    var cube = DefaultTileCubeCoordinates[index];
-                    return new CatanTileState
-                    {
-                        TileId = index + 1,
-                        ResourceType = tile.ResourceType,
-                        NumberToken = tile.NumberToken,
-                        CubeX = cube.X,
-                        CubeY = cube.Y,
-                        CubeZ = cube.Z
-                    };
-                })
-                .ToList(),
+            Tiles = tiles,
             Vertices = Enumerable.Range(1, 54)
                 .Select(id => new CatanVertexState
                 {
