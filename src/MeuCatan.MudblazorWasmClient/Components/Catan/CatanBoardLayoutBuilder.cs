@@ -5,7 +5,7 @@ namespace MeuCatan.MudblazorWasmClient.Components.Catan;
 
 public static class CatanBoardLayoutBuilder
 {
-    public static CatanBoardSvgModel Build(CatanGameStateResponse state, double width = 2000, double height = 2000)
+    public static CatanBoardSvgModel Build(CatanGameStateResponse state, double width = 1000, double height = 1000)
     {
         var centerX = width / 2.0;
         var centerY = height / 2.0;
@@ -158,8 +158,8 @@ public static class CatanBoardLayoutBuilder
             double anguloRadianos = anguloGraus * (Math.PI / 180.0);
 
             // Cálculo com inversão de Y para SVG
-            double x = centerX + radius * Math.Cos(anguloRadianos);
-            double y = centerY + radius * Math.Sin(anguloRadianos);
+            double x = centerX + radius * 0.95 * Math.Cos(anguloRadianos);
+            double y = centerY + radius * 0.95 * Math.Sin(anguloRadianos);
 
             // Arredonda para 1 casa decimal
             x = Math.Round(x, 1);
