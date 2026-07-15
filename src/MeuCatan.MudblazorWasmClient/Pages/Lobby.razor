@@ -1,0 +1,354 @@
+@page "/lobby"
+
+@inject ClienteAuthService AuthService
+@inject ClienteAuthStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Lobby</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4 mb-8">
+    <MudStack Spacing="2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h4">Lobby</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary"
+                       Disabled="@(!_podeAtualizar || _carregandoSalas)" OnClick="AtualizarSalasAsync">
+                @if (_carregandoSalas)
+                {
+                    <span>Atualizando...</span>
+                }
+                else if (!_podeAtualizar)
+                {
+                    <span>Atualizar (@_segundosRestantesRefresh s)</span>
+                }
+                else
+                {
+                    <span>Atualizar</span>
+                }
+            </MudButton>
+        </MudStack>
+
+        @if (!string.IsNullOrWhiteSpace(_erroGeral))
+        {
+            <MudAlert Severity="Severity.Error">@_erroGeral</MudAlert>
+        }
+
+        @if (_perfil is not null)
+        {
+            <MudAlert Severity="Severity.Info">
+                Logado como <strong>@_perfil.Nome</strong> (@(_perfil.IsGuest ? "convidado" : "registrado")).
+                @if (_perfil.IsGuest)
+                {
+                    <span> Usuários convidados podem entrar em salas, mas não podem criar.</span>
+                }
+            </MudAlert>
+        }
+
+        @if (_podeCriarSala)
+        {
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-2">Criar nova sala</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="5">
+                        <MudTextField Label="Nome da sala" @bind-Value="_novaSala.Nome" Variant="Variant.Outlined"
+                                      Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="string" Label="Jogo" @bind-Value="_novaSala.GameType" Variant="Variant.Outlined">
+                            @foreach (var jogo in _jogosDisponiveis)
+                            {
+                                <MudSelectItem Value="@jogo.GameType">@jogo.DisplayName</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudSelect T="string" Label="Tipo" @bind-Value="_novaSala.Tipo" Variant="Variant.Outlined">
+                            <MudSelectItem Value="@LobbyTipoSala.Publica">Pública</MudSelectItem>
+                            <MudSelectItem Value="@LobbyTipoSala.Privada">Privada</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="1">
+                        <MudNumericField T="int" Label="Capacidade" Min="@CapacidadeMinimaSelecionada"
+                                         Max="@CapacidadeMaximaSelecionada" @bind-Value="_novaSala.CapacidadeMaxima"
+                                         Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="1">
+                        <MudTextField Label="Código (opcional)" @bind-Value="_novaSala.CodigoPrivado"
+                                      Variant="Variant.Outlined" Disabled="@(_novaSala.Tipo != LobbyTipoSala.Privada)" />
+                    </MudItem>
+                </MudGrid>
+                <MudStack Row="true" Spacing="2" Class="mt-3" AlignItems="AlignItems.Center">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@_criandoSala"
+                               OnClick="CriarSalaAsync">
+                        @(_criandoSala ? "Criando..." : "Criar sala")
+                    </MudButton>
+                    @if (!string.IsNullOrWhiteSpace(_mensagemCriacao))
+                    {
+                        <MudAlert Severity="Severity.Success" Dense="true">@_mensagemCriacao</MudAlert>
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+
+        <MudText Typo="Typo.h6">Salas existentes (@_salas.Count)</MudText>
+
+        @if (_carregandoSalas && _salas.Count == 0)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (_salas.Count == 0)
+        {
+            <MudAlert Severity="Severity.Warning">Nenhuma sala disponível no momento.</MudAlert>
+        }
+        else
+        {
+            <MudGrid>
+                @foreach (var sala in _salas)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudCard>
+                            <MudCardContent>
+                                <MudText Typo="Typo.h6">@sala.Nome</MudText>
+                                <MudText Typo="Typo.body2">Jogo: @sala.GameDisplayName</MudText>
+                                <MudText Typo="Typo.body2">Tipo: @sala.Tipo</MudText>
+                                <MudText Typo="Typo.body2">Criador: @sala.CriadorNome</MudText>
+                                <MudText Typo="Typo.body2">Jogadores: @sala.JogadoresAtuais/@sala.CapacidadeMaxima</MudText>
+                                <MudText Typo="Typo.body2">Fase: @FormatarFase(sala.Fase)</MudText>
+
+                                @if (sala.RequerCodigo && !sala.UsuarioNaSala)
+                                {
+                                    <MudTextField Label="Código da sala" Class="mt-2" Variant="Variant.Outlined" Immediate="true"
+                                                  @bind-Value="_codigoPrivadoPorSala[sala.SalaId]" />
+                                }
+                            </MudCardContent>
+                            <MudCardActions>
+                                @if (sala.UsuarioNaSala)
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@_acaoEmAndamento"
+                                               OnClick="() => AbrirSala(sala.SalaId)">
+                                        Abrir sala
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Error" Disabled="@_acaoEmAndamento"
+                                               OnClick="() => SairSalaAsync(sala.SalaId)">
+                                        Sair
+                                    </MudButton>
+                                }
+                                else
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@_acaoEmAndamento"
+                                               OnClick="() => EntrarSalaAsync(sala.SalaId)">
+                                        Entrar
+                                    </MudButton>
+                                }
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly Dictionary<int, string?> _codigoPrivadoPorSala = [];
+
+    private ClientProfileResponse? _perfil;
+    private List<LobbySalaResumoResponse> _salas = [];
+    private List<LobbyJogoDisponivelResponse> _jogosDisponiveis = [];
+    private LobbyCriarSalaRequest _novaSala = new();
+    private bool _carregandoSalas;
+    private bool _criandoSala;
+    private bool _acaoEmAndamento;
+    private string? _erroGeral;
+    private string? _mensagemCriacao;
+
+    private bool _podeAtualizar = true;
+    private int _segundosRestantesRefresh;
+
+    private bool _podeCriarSala => _perfil is not null && !_perfil.IsGuest;
+    private int CapacidadeMinimaSelecionada => JogoSelecionado?.MinPlayers ?? 2;
+    private int CapacidadeMaximaSelecionada => JogoSelecionado?.MaxPlayers ?? 8;
+    private LobbyJogoDisponivelResponse? JogoSelecionado => _jogosDisponiveis.FirstOrDefault(j => j.GameType ==
+_novaSala.GameType);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var jogosResult = await AuthService.ListarJogosDisponiveisAsync();
+        if (jogosResult.Success && jogosResult.Data is not null)
+        {
+            _jogosDisponiveis = jogosResult.Data.Jogos;
+        }
+
+        _novaSala.Tipo = LobbyTipoSala.Publica;
+        _novaSala.GameType = _jogosDisponiveis.FirstOrDefault()?.GameType ?? LobbyTipoJogo.CatanBase;
+        _novaSala.CapacidadeMaxima = JogoSelecionado?.MaxPlayers ?? 4;
+
+        _perfil = await AuthService.GetProfileAsync();
+        await AtualizarSalasAsync();
+    }
+
+    private async Task AtualizarSalasAsync()
+    {
+        if (!_podeAtualizar)
+        {
+            return;
+        }
+
+        _erroGeral = null;
+        _mensagemCriacao = null;
+        _carregandoSalas = true;
+
+        var result = await AuthService.ListarSalasAsync();
+
+        _carregandoSalas = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _erroGeral = result.ErrorMessage;
+            return;
+        }
+
+        _salas = result.Data.Salas;
+
+        foreach (var sala in _salas.Where(s => s.RequerCodigo && !_codigoPrivadoPorSala.ContainsKey(s.SalaId)))
+        {
+            _codigoPrivadoPorSala[sala.SalaId] = null;
+        }
+
+        _ = IniciarCooldownRefreshAsync();
+    }
+
+    private async Task CriarSalaAsync()
+    {
+        _erroGeral = null;
+        _mensagemCriacao = null;
+
+        if (!_podeCriarSala)
+        {
+            _erroGeral = "Usuário convidado não pode criar sala.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_novaSala.Nome))
+        {
+            _erroGeral = "Informe o nome da sala.";
+            return;
+        }
+
+        _criandoSala = true;
+
+        var request = new LobbyCriarSalaRequest
+        {
+            Nome = _novaSala.Nome.Trim(),
+            Tipo = _novaSala.Tipo,
+            CapacidadeMaxima = _novaSala.CapacidadeMaxima,
+            CodigoPrivado = _novaSala.Tipo == LobbyTipoSala.Privada ? _novaSala.CodigoPrivado : null,
+            GameType = _novaSala.GameType
+        };
+
+        var result = await AuthService.CriarSalaAsync(request);
+
+        _criandoSala = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _erroGeral = result.ErrorMessage;
+            return;
+        }
+
+        _mensagemCriacao = result.Data.Tipo == LobbyTipoSala.Privada
+            ? $"Sala criada com sucesso. Código: {result.Data.CodigoPrivadoGerado}"
+            : "Sala criada com sucesso.";
+
+        Navigation.NavigateTo($"/sala/{result.Data.SalaId}");
+    }
+
+    private async Task EntrarSalaAsync(int salaId)
+    {
+        _erroGeral = null;
+        _acaoEmAndamento = true;
+
+        _codigoPrivadoPorSala.TryGetValue(salaId, out var codigoPrivado);
+
+        var result = await AuthService.EntrarSalaAsync(salaId, codigoPrivado);
+
+        _acaoEmAndamento = false;
+
+        if (!result.Success)
+        {
+            _erroGeral = result.ErrorMessage;
+            return;
+        }
+
+        Navigation.NavigateTo($"/sala/{salaId}");
+    }
+
+    private async Task SairSalaAsync(int salaId)
+    {
+        _erroGeral = null;
+        _acaoEmAndamento = true;
+
+        var result = await AuthService.SairSalaAsync(salaId);
+
+        _acaoEmAndamento = false;
+
+        if (!result.Success)
+        {
+            _erroGeral = result.ErrorMessage;
+            return;
+        }
+
+        await AtualizarSalasSemCooldownAsync();
+    }
+
+    private async Task AtualizarSalasSemCooldownAsync()
+    {
+        _erroGeral = null;
+        _carregandoSalas = true;
+
+        var result = await AuthService.ListarSalasAsync();
+
+        _carregandoSalas = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _erroGeral = result.ErrorMessage;
+            return;
+        }
+
+        _salas = result.Data.Salas;
+    }
+
+    private void AbrirSala(int salaId)
+    {
+        Navigation.NavigateTo($"/sala/{salaId}");
+    }
+
+    private static string FormatarFase(LobbyFaseSala fase)
+    {
+        return fase switch
+        {
+            LobbyFaseSala.Lobby => "Lobby",
+            LobbyFaseSala.Setup => "Setup",
+            LobbyFaseSala.InGame => "Em jogo",
+            LobbyFaseSala.Ended => "Encerrada",
+            _ => fase.ToString()
+        };
+    }
+
+    private async Task IniciarCooldownRefreshAsync()
+    {
+        _podeAtualizar = false;
+        _segundosRestantesRefresh = 5;
+        StateHasChanged();
+
+        while (_segundosRestantesRefresh > 0)
+        {
+            await Task.Delay(1000);
+            _segundosRestantesRefresh--;
+            StateHasChanged();
+        }
+
+        _podeAtualizar = true;
+        StateHasChanged();
+    }
+}

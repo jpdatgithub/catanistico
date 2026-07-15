@@ -1,0 +1,113 @@
+@page "/login"
+@attribute [AllowAnonymous]
+
+@inject ClienteAuthService AuthService
+@inject NavigationManager Navigation
+@inject ClienteAuthStateProvider ClienteAuthStateProvider
+
+<PageTitle>Login</PageTitle>
+
+<MudGrid Justify="Justify.Center" Class="mt-6">
+    <MudItem xs="12" sm="10" md="6" lg="4">
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h5">Acessar conta</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    Entrar é opcional. Você pode continuar usando o app como convidado.
+                </MudText>
+
+                <MudForm @ref="_form" Model="model" @bind-IsValid="_isValid">
+                    <MudTextField @bind-Value="model.Email" Label="Email" Variant="Variant.Outlined"
+                                  Immediate="true" Required="true" />
+                    <MudTextField @bind-Value="model.Senha" Label="Senha" Variant="Variant.Outlined"
+                                  InputType="InputType.Password" Class="mt-3" Immediate="true" Required="true" />
+
+                    @if (!string.IsNullOrWhiteSpace(erro))
+                    {
+                        <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@erro</MudAlert>
+                    }
+                </MudForm>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Outlined" OnClick="ContinuarComoConvidadoAsync" Disabled="@carregando">
+                    Continuar como convidado
+                </MudButton>
+                <MudButton Variant="Variant.Text" Href="/register">Registrar novo usuário</MudButton>
+                <MudSpacer />
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="FazerLogin"
+                           Disabled="@(!_isValid || carregando)">
+                    @(carregando ? "Entrando..." : "Entrar")
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private MudForm _form = null!;
+    private bool _isValid;
+    private LoginClientRequest model = new();
+    private string? erro;
+    private bool carregando;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await ClienteAuthStateProvider.GetAuthenticationStateAsync();
+
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/lobby", replace: true);
+        }
+    }
+
+    private async Task FazerLogin()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        erro = null;
+        carregando = true;
+
+        var result = await AuthService.LoginAsync(model);
+        carregando = false;
+
+        if (!result.Success)
+        {
+            erro = result.ErrorMessage;
+            return;
+        }
+
+        Navigation.NavigateTo("/lobby", forceLoad: true);
+    }
+
+    private async Task ContinuarComoConvidadoAsync()
+    {
+        erro = null;
+        carregando = true;
+
+        if (await ClienteAuthStateProvider.IsGuestAsync())
+        {
+            carregando = false;
+            Navigation.NavigateTo("/lobby", forceLoad: true);
+            return;
+        }
+
+        var result = await AuthService.ContinueAsGuestAsync();
+        carregando = false;
+
+        if (!result.Success)
+        {
+            erro = result.ErrorMessage;
+            return;
+        }
+
+        Navigation.NavigateTo("/lobby", forceLoad: true);
+    }
+}

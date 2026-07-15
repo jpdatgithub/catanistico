@@ -1,0 +1,86 @@
+@page "/register"
+@attribute [AllowAnonymous]
+
+@inject ClienteAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Registrar</PageTitle>
+
+<MudGrid Justify="Justify.Center" Class="mt-6">
+    <MudItem xs="12" sm="10" md="7" lg="5">
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h5">Criar conta</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudForm @ref="_form" Model="model" @bind-IsValid="_isValid">
+                    <MudTextField @bind-Value="model.Nome" Label="Nome" Variant="Variant.Outlined" Immediate="true"
+                                  Required="true" />
+                    <MudTextField @bind-Value="model.Email" Label="Email" Variant="Variant.Outlined" Immediate="true"
+                                  Required="true" Class="mt-3" />
+                    <MudTextField @bind-Value="model.Senha" Label="Senha" Variant="Variant.Outlined"
+                                  InputType="InputType.Password" Immediate="true" Required="true" Class="mt-3" />
+
+                    @if (!string.IsNullOrWhiteSpace(erro))
+                    {
+                        <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@erro</MudAlert>
+                    }
+                </MudForm>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Text" Href="/login">Voltar para login</MudButton>
+                <MudSpacer />
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Registrar"
+                           Disabled="@(!_isValid || carregando)">
+                    @(carregando ? "Registrando..." : "Registrar")
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private MudForm _form = null!;
+    private bool _isValid;
+    private RegisterClientRequest model = new();
+    private string? erro;
+    private bool carregando;
+
+    private async Task Registrar()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        erro = null;
+        carregando = true;
+
+        var registerResult = await AuthService.RegisterAsync(model);
+        if (!registerResult.Success)
+        {
+            carregando = false;
+            erro = registerResult.ErrorMessage;
+            return;
+        }
+
+        var loginResult = await AuthService.LoginAsync(new LoginClientRequest
+        {
+            Email = model.Email,
+            Senha = model.Senha
+        });
+
+        carregando = false;
+
+        if (!loginResult.Success)
+        {
+            erro = loginResult.ErrorMessage;
+            return;
+        }
+
+        Navigation.NavigateTo("/lobby", forceLoad: true);
+    }
+}

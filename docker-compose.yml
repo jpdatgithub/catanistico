@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: meucatan-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: meucatan_dev
+      POSTGRES_USER: meucatan_dev
+      POSTGRES_PASSWORD: meucatan_dev
+    ports:
+      - "55432:5432"
+    volumes:
+      - meucatan_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  meucatan_postgres_data:

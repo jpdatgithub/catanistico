@@ -1,0 +1,115 @@
+@namespace MeuCatan.MudblazorWasmClient.Components.Catan
+@using System.Globalization
+
+@if (State is null)
+{
+    <MudAlert Severity="Severity.Warning">Estado do tabuleiro indisponível.</MudAlert>
+}
+else
+{
+    var model = CatanBoardLayoutBuilder.Build(State);
+    var viewBox = F(_panX) + " " + F(_panY) + " " + F(_viewW) + " " + F(_viewH);
+    var cursor = _isDragging ? "grabbing" : "grab";
+
+    <div style="width:100%; height:@(DisplayHeight)px; overflow:hidden; user-select:none;">
+        <svg viewBox="@viewBox" width="100%" height="100%" class="catan-board-svg" role="img"
+             aria-label="Tabuleiro do Catan" style="cursor:@cursor; display:block;" @onwheel="OnWheel"
+             @onwheel:preventDefault @onmousedown="OnMouseDown" @onmousemove="OnMouseMove" @onmouseup="OnMouseUp"
+             @onmouseleave="OnMouseUp">
+
+            @* <rect x="0" y="0" width="@model.Width" height="@model.Height" rx="24" ry="24" fill="#1a6fa8" /> *@
+
+            @foreach (var tile in model.Tiles)
+            {
+                <polygon points="@tile.Points" fill="@tile.Fill" stroke="#2f2f2f" stroke-width="2" />
+                <circle cx="@tile.CenterX" cy="@tile.CenterY" r="3" fill="red" />
+            }
+        </svg>
+    </div>
+}
+
+@code {
+    private const double CanvasWidth = 2000;
+    private const double CanvasHeight = 2000;
+    private const double ZoomStep = 0.15;
+    private const double ZoomMin = 0.5;
+    private const double ZoomMax = 4.0;
+
+    [Parameter] public CatanGameStateResponse? State { get; set; }
+    [Parameter] public double DisplayWidth { get; set; } = 900;
+    [Parameter] public double DisplayHeight { get; set; } = 700;
+
+    // ViewBox state — the "camera" window into the 2000×2000 canvas
+    private double _panX;
+    private double _panY;
+    private double _viewW;
+    private double _viewH;
+
+    // Pan drag state
+    private bool _isDragging;
+    private double _dragStartClientX;
+    private double _dragStartClientY;
+    private double _panStartX;
+    private double _panStartY;
+
+    protected override void OnInitialized()
+    {
+        _viewW = DisplayWidth;
+        _viewH = DisplayHeight;
+        _panX = (CanvasWidth - _viewW) / 2.0;
+        _panY = (CanvasHeight - _viewH) / 2.0;
+    }
+
+    private void OnWheel(WheelEventArgs e)
+    {
+        // Convert mouse position (CSS px relative to SVG element) to canvas coordinates
+        var scaleX = _viewW / DisplayWidth;
+        var scaleY = _viewH / DisplayHeight;
+        var canvasMouseX = _panX + e.OffsetX * scaleX;
+        var canvasMouseY = _panY + e.OffsetY * scaleY;
+
+        var factor = e.DeltaY < 0 ? (1.0 + ZoomStep) : (1.0 - ZoomStep);
+        var newViewW = Math.Clamp(_viewW / factor, CanvasWidth / ZoomMax, CanvasWidth / ZoomMin);
+        var newViewH = Math.Clamp(_viewH / factor, CanvasHeight / ZoomMax, CanvasHeight / ZoomMin);
+
+        // Keep the canvas point under the cursor fixed after zoom
+        var ratioX = newViewW / _viewW;
+        var ratioY = newViewH / _viewH;
+        _panX = canvasMouseX - (canvasMouseX - _panX) * ratioX;
+        _panY = canvasMouseY - (canvasMouseY - _panY) * ratioY;
+        _viewW = newViewW;
+        _viewH = newViewH;
+        ClampPan();
+    }
+
+    private void OnMouseDown(MouseEventArgs e)
+    {
+        if (e.Button != 0) return;
+        _isDragging = true;
+        _dragStartClientX = e.ClientX;
+        _dragStartClientY = e.ClientY;
+        _panStartX = _panX;
+        _panStartY = _panY;
+    }
+
+    private void OnMouseMove(MouseEventArgs e)
+    {
+        if (!_isDragging) return;
+        var scaleX = _viewW / DisplayWidth;
+        var scaleY = _viewH / DisplayHeight;
+        _panX = _panStartX - (e.ClientX - _dragStartClientX) * scaleX;
+        _panY = _panStartY - (e.ClientY - _dragStartClientY) * scaleY;
+        ClampPan();
+    }
+
+    private void OnMouseUp(MouseEventArgs e) => _isDragging = false;
+
+    // Keeps the viewport window inside the canvas bounds
+    private void ClampPan()
+    {
+        _panX = Math.Clamp(_panX, 0, Math.Max(0, CanvasWidth - _viewW));
+        _panY = Math.Clamp(_panY, 0, Math.Max(0, CanvasHeight - _viewH));
+    }
+
+    private static string F(double v) => v.ToString("F2", CultureInfo.InvariantCulture);
+}

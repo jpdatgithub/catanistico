@@ -1,0 +1,331 @@
+@page "/sala/{SalaId:int}"
+@implements IAsyncDisposable
+
+@inject ClienteAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Sala</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4 mb-8">
+    @if (_carregando && _sala is null)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_sala is null)
+    {
+        <MudAlert Severity="Severity.Error">@(_erro ?? "Sala não encontrada.")</MudAlert>
+    }
+    else
+    {
+        <MudStack Spacing="2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h4">@_sala.Nome</MudText>
+                    <MudText Typo="Typo.body1">@_sala.GameDisplayName</MudText>
+                    <MudText Typo="Typo.body2">Fase: @FormatarFase(_sala.Fase)</MudText>
+                    <MudText Typo="Typo.body2">Jogadores: @_sala.JogadoresAtuais/@_sala.CapacidadeMaxima</MudText>
+                    <MudText Typo="Typo.body2">Criador: @_sala.CriadorNome</MudText>
+                </MudStack>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" OnClick="AtualizarSalaAsync" Disabled="@_acaoEmAndamento">
+                        Atualizar</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="SairDaSalaAsync"
+                                   Disabled="@_acaoEmAndamento">Sair da sala</MudButton>
+                    </MudStack>
+                </MudStack>
+
+                @if (!string.IsNullOrWhiteSpace(_erro))
+                {
+                    <MudAlert Severity="Severity.Error">@_erro</MudAlert>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(_mensagem))
+                {
+                    <MudAlert Severity="Severity.Success">@_mensagem</MudAlert>
+                }
+
+                <MudGrid>
+                    <MudItem xs="12" md="7">
+                        <MudPaper Class="pa-4">
+                            <MudText Typo="Typo.h6" Class="mb-2">Jogadores</MudText>
+                            <MudList T="LobbyJogadorResponse">
+                                @foreach (var jogador in _sala.Jogadores)
+                                {
+                                    <MudListItem T="LobbyJogadorResponse" Value="jogador">
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center"
+                                                  Class="w-100">
+                                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                <MudText>@jogador.Nome</MudText>
+                                                @if (jogador.IsGuest)
+                                                {
+                                                    <MudChip Size="Size.Small" Color="Color.Secondary">Convidado</MudChip>
+                                                }
+                                                @if (jogador.IsCreator)
+                                                {
+                                                    <MudChip Size="Size.Small" Color="Color.Primary">Criador</MudChip>
+                                                }
+                                            </MudStack>
+                                            @if (jogador.IsCreator)
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Info">Pode iniciar</MudChip>
+                                            }
+                                            else if (jogador.IsReady)
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Success">Pronto</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Warning">Aguardando</MudChip>
+                                            }
+                                        </MudStack>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        </MudPaper>
+                    </MudItem>
+
+                    <MudItem xs="12" md="5">
+                        <MudStack Spacing="2">
+                            <MudPaper Class="pa-4">
+                                <MudText Typo="Typo.h6" Class="mb-2">Jogo e setup</MudText>
+
+                                @if (_sala.CanCurrentUserSelectGame)
+                                {
+                                    <MudSelect T="string" Label="Jogo" Value="@_sala.GameType" ValueChanged="SelecionarJogoAsync"
+                                               Variant="Variant.Outlined" Disabled="@_acaoEmAndamento">
+                                        @foreach (var jogo in _jogos)
+                                        {
+                                            <MudSelectItem Value="@jogo.GameType">@jogo.DisplayName (@jogo.MinPlayers-@jogo.MaxPlayers)
+                                            </MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2">Jogo selecionado: @_sala.GameDisplayName</MudText>
+                                }
+
+                                @if (_sala.GameType == LobbyTipoJogo.CatanBase)
+                                {
+                                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                                        Catan base está configurado para 3 a 4 jogadores e ainda não possui opções adicionais neste
+                                        corte.
+                                    </MudAlert>
+                                }
+                            </MudPaper>
+
+                            <MudPaper Class="pa-4">
+                                <MudText Typo="Typo.h6" Class="mb-2">Prontidão</MudText>
+                                <MudText Typo="Typo.body2" Class="mb-3">
+                                    O criador inicia a partida quando houver pelo menos @_sala.MinJogadores jogadores e todos os
+                                    demais estiverem prontos.
+                                </MudText>
+
+                                @if (_sala.CurrentUserIsCreator)
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                               Disabled="@(!_sala.CanCurrentUserStart || _acaoEmAndamento)" OnClick="IniciarJogoAsync">
+                                        @(_acaoEmAndamento ? "Processando..." : "Iniciar jogo")
+                                    </MudButton>
+                                }
+                                else if (_sala.Fase is LobbyFaseSala.Lobby or LobbyFaseSala.Setup)
+                                {
+                                    <MudButton Variant="Variant.Filled"
+                                               Color="@(_sala.CurrentUserIsReady ? Color.Warning : Color.Success)"
+                                               Disabled="@_acaoEmAndamento" OnClick="AlternarProntoAsync">
+                                        @(_sala.CurrentUserIsReady ? "Cancelar pronto" : "Marcar como pronto")
+                                    </MudButton>
+                                }
+
+                                @if (_sala.Fase == LobbyFaseSala.InGame)
+                                {
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="@($"/jogo/{_sala.SalaId}")">
+                                        Ir para o jogo
+                                    </MudButton>
+                                }
+                            </MudPaper>
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+            </MudStack>
+        }
+    </MudContainer>
+
+@code {
+    [Parameter]
+    public int SalaId { get; set; }
+
+    private LobbyDetalheSalaResponse? _sala;
+    private List<LobbyJogoDisponivelResponse> _jogos = [];
+    private string? _erro;
+    private string? _mensagem;
+    private bool _carregando;
+    private bool _acaoEmAndamento;
+    private CancellationTokenSource? _pollingCancellation;
+    private Task? _pollingTask;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarJogosAsync();
+        await AtualizarSalaAsync();
+
+        _pollingCancellation = new CancellationTokenSource();
+        _pollingTask = IniciarPollingAsync(_pollingCancellation.Token);
+    }
+
+    private async Task CarregarJogosAsync()
+    {
+        var result = await AuthService.ListarJogosDisponiveisAsync();
+        if (result.Success && result.Data is not null)
+        {
+            _jogos = result.Data.Jogos;
+        }
+    }
+
+    private async Task AtualizarSalaAsync()
+    {
+        _erro = null;
+        _carregando = true;
+
+        var result = await AuthService.ObterSalaAsync(SalaId);
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _erro = result.ErrorMessage;
+            return;
+        }
+
+        _sala = result.Data;
+    }
+
+    private async Task SelecionarJogoAsync(string gameType)
+    {
+        _erro = null;
+        _mensagem = null;
+        _acaoEmAndamento = true;
+
+        var result = await AuthService.SelecionarJogoAsync(SalaId, gameType);
+
+        _acaoEmAndamento = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _erro = result.ErrorMessage;
+            return;
+        }
+
+        _sala = result.Data;
+        _mensagem = "Jogo da sala atualizado. O status de pronto foi reiniciado para os demais jogadores.";
+    }
+
+    private async Task AlternarProntoAsync()
+    {
+        if (_sala is null)
+        {
+            return;
+        }
+
+        _erro = null;
+        _mensagem = null;
+        _acaoEmAndamento = true;
+
+        var result = await AuthService.AlterarProntoAsync(SalaId, !_sala.CurrentUserIsReady);
+
+        _acaoEmAndamento = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _erro = result.ErrorMessage;
+            return;
+        }
+
+        _sala = result.Data;
+    }
+
+    private async Task IniciarJogoAsync()
+    {
+        _erro = null;
+        _mensagem = null;
+        _acaoEmAndamento = true;
+
+        var result = await AuthService.IniciarJogoAsync(SalaId);
+
+        _acaoEmAndamento = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _erro = result.ErrorMessage;
+            return;
+        }
+
+        Navigation.NavigateTo(result.Data.RedirectPath);
+    }
+
+    private async Task SairDaSalaAsync()
+    {
+        _erro = null;
+        _mensagem = null;
+        _acaoEmAndamento = true;
+
+        var result = await AuthService.SairSalaAsync(SalaId);
+
+        _acaoEmAndamento = false;
+
+        if (!result.Success)
+        {
+            _erro = result.ErrorMessage;
+            return;
+        }
+
+        Navigation.NavigateTo("/lobby");
+    }
+
+    private async Task IniciarPollingAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                var result = await AuthService.ObterSalaAsync(SalaId);
+                if (result.Success && result.Data is not null)
+                {
+                    _sala = result.Data;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_pollingCancellation is not null)
+        {
+            await _pollingCancellation.CancelAsync();
+            _pollingCancellation.Dispose();
+        }
+
+        if (_pollingTask is not null)
+        {
+            await _pollingTask;
+        }
+    }
+
+    private static string FormatarFase(LobbyFaseSala fase)
+    {
+        return fase switch
+        {
+            LobbyFaseSala.Lobby => "Lobby",
+            LobbyFaseSala.Setup => "Setup",
+            LobbyFaseSala.InGame => "Em jogo",
+            LobbyFaseSala.Ended => "Encerrada",
+            _ => fase.ToString()
+        };
+    }
+}

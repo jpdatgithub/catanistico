@@ -1,0 +1,1 @@
+dotnet watch --project src/MeuCatan.MudblazorWasmClient/MeuCatan.MudblazorWasmClient.csproj

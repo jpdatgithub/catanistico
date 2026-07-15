@@ -1,0 +1,232 @@
+@page "/jogo/{SalaId:int}"
+@implements IAsyncDisposable
+
+@inject ClienteAuthService AuthService
+@inject NavigationManager Navigation
+@using MeuCatan.MudblazorWasmClient.Components.Catan
+@using System.Text.Json
+
+<PageTitle>Jogo</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-4 mb-8 px-4">
+    @if (_carregando && _session is null)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_session is null)
+    {
+        <MudAlert Severity="Severity.Error">@(_erro ?? "Sessão de jogo não encontrada.")</MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudStack Spacing="2">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6">Sessão</MudText>
+                        <MudText Typo="Typo.body2">Sala: @_session.SalaId</MudText>
+                        <MudText Typo="Typo.body2">Jogo: @_session.GameType</MudText>
+                        <MudText Typo="Typo.body2">Fase: @FormatarFase(_session.Phase)</MudText>
+                        <MudText Typo="Typo.body2">Turno atual: @_session.CurrentPlayerNome</MudText>
+                        <MudText Typo="Typo.body2">Você pode agir: @(_session.CanCurrentUserAct ? "sim" : "não")</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="pa-4">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.h6">Jogadores</MudText>
+                            <MudButton Variant="Variant.Text" OnClick="AtualizarSessaoAsync" Disabled="@_carregando">
+                                Atualizar
+                            </MudButton>
+                        </MudStack>
+                        <MudList T="GamePlayerStateResponse">
+                            @foreach (var player in _session.Players)
+                            {
+                                <MudListItem T="GamePlayerStateResponse" Value="player">
+                                    <MudStack Spacing="0" Class="w-100">
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                            <MudText>@player.Nome</MudText>
+                                            <MudChip Size="Size.Small"
+                                                     Color="@(player.IsCurrentTurn ? Color.Primary : Color.Default)">@player.Cor
+                                            </MudChip>
+                                        </MudStack>
+                                        <MudText Typo="Typo.caption">Pontos: @player.Pontos</MudText>
+                                        <MudText Typo="Typo.caption">Peças: estradas @player.RemainingRoads, aldeias
+                                            @player.RemainingSettlements, cidades @player.RemainingCities</MudText>
+                                        </MudStack>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        </MudPaper>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h5" Class="mb-2">Tabuleiro de Catan</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-4">
+                            Este primeiro corte já carrega uma sessão real e um board SVG do Catan. As ações interativas de
+                            colocação inicial entram no próximo passo.
+                        </MudText>
+
+                        @if (_session.CatanState is not null)
+                        {
+                            <CatanBoardSvg State="_session.CatanState" DisplayWidth="900" DisplayHeight="600" />
+                        }
+                    </MudPaper>
+                </MudItem>
+
+                <MudItem xs="12" md="3">
+                    <MudStack Spacing="2">
+                        <MudPaper Class="pa-4">
+                            <MudText Typo="Typo.h6">Debug do state (backend)</MudText>
+                            <MudExpansionPanels>
+                                <MudExpansionPanel Text="GameSessionResponse (completo)">
+                                    <MudText Typo="Typo.caption" Class="text-wrap" Style="white-space: pre-wrap; font-family: Consolas, monospace;">@SessionDebugJson</MudText>
+                                </MudExpansionPanel>
+
+                                @if (_session.CatanState is not null)
+                                {
+                                    <MudExpansionPanel Text="CatanState">
+                                        <MudText Typo="Typo.caption" Class="text-wrap" Style="white-space: pre-wrap; font-family: Consolas, monospace;">@CatanStateDebugJson</MudText>
+                                    </MudExpansionPanel>
+                                }
+                            </MudExpansionPanels>
+                        </MudPaper>
+
+                        <MudPaper Class="pa-4">
+                            <MudText Typo="Typo.h6">Setup inicial</MudText>
+                            @if (_session.CatanState is not null)
+                            {
+                                <MudText Typo="Typo.body2">Etapa atual: @_session.CatanState.SetupStepIndex</MudText>
+                                <MudText Typo="Typo.body2">Ordem de setup: @string.Join(" -> ", _session.CatanState.SetupTurnOrder)
+                                </MudText>
+                                <MudText Typo="Typo.body2">Última aldeia:
+                                    @(_session.CatanState.LastPlacedSettlementVertexId?.ToString() ?? "nenhuma")</MudText>
+                                    <MudText Typo="Typo.body2">Ladrão no tile: @(_session.CatanState.RobberTileId?.ToString() ?? "n/d")
+                                    </MudText>
+                                }
+                            </MudPaper>
+
+                            <MudPaper Class="pa-4">
+                                <MudText Typo="Typo.h6">Próximas ações</MudText>
+                                @if (_session.AvailableActions.Count == 0)
+                                {
+                                    <MudText Typo="Typo.body2">Nenhuma ação disponível para você neste momento.</MudText>
+                                }
+                                else
+                                {
+                                    @foreach (var action in _session.AvailableActions)
+                                    {
+                                        <MudChip T="string" Class="mr-1 mb-1" Color="Color.Info" Value="@action">@action</MudChip>
+                                    }
+                                }
+                            </MudPaper>
+
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="@($"/sala/{SalaId}")">
+                                Voltar para a sala
+                            </MudButton>
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+            }
+        </MudContainer>
+
+@code {
+    [Parameter]
+    public int SalaId { get; set; }
+
+    private GameSessionResponse? _session;
+    private string? _erro;
+    private bool _carregando;
+    private CancellationTokenSource? _pollingCancellation;
+    private Task? _pollingTask;
+    private static readonly JsonSerializerOptions _jsonDebugOptions = new()
+    {
+        WriteIndented = true
+    };
+
+    private string SessionDebugJson => SerializarDebug(_session);
+    private string CatanStateDebugJson => SerializarDebug(_session?.CatanState);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AtualizarSessaoAsync();
+
+        _pollingCancellation = new CancellationTokenSource();
+        _pollingTask = IniciarPollingAsync(_pollingCancellation.Token);
+    }
+
+    private async Task AtualizarSessaoAsync()
+    {
+        _erro = null;
+        _carregando = true;
+
+        var result = await AuthService.ObterSessaoJogoAsync(SalaId);
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _erro = result.ErrorMessage;
+            return;
+        }
+
+        _session = result.Data;
+    }
+
+    private async Task IniciarPollingAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                var result = await AuthService.ObterSessaoJogoAsync(SalaId);
+                if (result.Success && result.Data is not null)
+                {
+                    _session = result.Data;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_pollingCancellation is not null)
+        {
+            await _pollingCancellation.CancelAsync();
+            _pollingCancellation.Dispose();
+        }
+
+        if (_pollingTask is not null)
+        {
+            await _pollingTask;
+        }
+    }
+
+    private static string FormatarFase(GameTipoFase phase)
+    {
+        return phase switch
+        {
+            GameTipoFase.SetupInicial => "Setup inicial",
+            GameTipoFase.Turno => "Turno",
+            GameTipoFase.Finalizado => "Finalizado",
+            _ => phase.ToString()
+        };
+    }
+
+    private static string SerializarDebug<T>(T? payload)
+    {
+        if (payload is null)
+        {
+            return "null";
+        }
+
+        return JsonSerializer.Serialize(payload, _jsonDebugOptions);
+    }
+}
