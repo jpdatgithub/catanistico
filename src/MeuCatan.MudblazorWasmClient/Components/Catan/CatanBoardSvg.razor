@@ -8,7 +8,7 @@
 }
 else
 {
-    var model = CatanBoardLayoutBuilder.Build(State, CanvasWidth, CanvasHeight);
+    var model = CatanBoardLayoutBuilder.Build(State);
     var transform = $"translate({F(_tx)},{F(_ty)}) scale({F(_scale)})";
     var cursor = _isDragging ? "grabbing" : "grab";
 
@@ -21,6 +21,10 @@ else
                 {
                     <polygon points="@tile.Points" fill="@tile.Fill" stroke="#2f2f2f" stroke-width="2" />
                 }
+                @foreach (var vertex in model.Vertices)
+                {
+                    <circle cx="@F(vertex.X)" cy="@F(vertex.Y)" r="6" fill="#2f2f2f" />
+                }
 
             </g>
         </svg>
@@ -28,8 +32,8 @@ else
 }
 
 @code {
-    private const double CanvasWidth = 1000;
-    private const double CanvasHeight = 1000;
+    private double CanvasWidth;
+    private double CanvasHeight;
     private const double ZoomStep = 0.15;
     private const double ZoomMin = 0.3;
     private const double ZoomMax = 4.0;
@@ -62,6 +66,8 @@ else
     protected override void OnInitialized()
     {
         // Initial estimate using parameter values; corrected in OnAfterRenderAsync
+        CanvasWidth = State?.width ?? 1000;
+        CanvasHeight = State?.height ?? 1000;
         _scale = Math.Min(DisplayWidth / CanvasWidth, DisplayHeight / CanvasHeight);
         _tx = (DisplayWidth - CanvasWidth * _scale) / 2.0;
         _ty = (DisplayHeight - CanvasHeight * _scale) / 2.0;

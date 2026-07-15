@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using MeuCatan.ClassLib.Contracts;
+using static MeuCatan.ClassLib.Utils.HexUtils;
 
 namespace MeuCatan.Api.Services;
 
@@ -107,7 +108,10 @@ public sealed class CatanGameSessionService : IGameSessionService
 
     private static CatanBoardState Create34TraditionalBoardState()
     {
+        var board = new CatanBoardState { };
+
         var recursos = new List<string>();
+
         for (int i = 0; i < 4; i++)
         {
             recursos.Add("madeira");
@@ -141,37 +145,50 @@ public sealed class CatanGameSessionService : IGameSessionService
         OrderedTiles.AddRange(rotatedInner);
         OrderedTiles.Add((0, 0, 0));
 
+        var vertices = new Dictionary<(double X, double Y), CatanVertexState>();
+
         var tiles = OrderedTiles
-            .Select((hexagon, index) => new CatanTileState
+            .Select((hexagon, index) =>
             {
-                TileId = index + 1,
-                ResourceType = recursos[index],
-                NumberToken = numberTokens[index],
-                CubeX = hexagon.X,
-                CubeY = hexagon.Y,
-                CubeZ = hexagon.Z
+                var hexCenter = CubeToCenterPixel(board.width / 2.0, board.height / 2.0, hexagon.X, hexagon.Y, hexagon.Z, 100.0);
+
+                CalcularPontosSvg(hexCenter.X, hexCenter.Y, 100.0)
+                    .ForEach(point =>
+                    {
+                        if (!vertices.ContainsKey(point))
+                        {
+                            var catanVertex = new CatanVertexState
+                            {
+                                VertexId = vertices.Count + 1,
+                                Position = point,
+                                Resources = [recursos[index]],
+                            };
+                            vertices[point] = catanVertex;
+                        }
+                        else
+                        {
+                            vertices[point].Resources.Add(recursos[index]);
+                        }
+                    });
+
+                return new CatanTileState
+                {
+                    TileId = index + 1,
+                    ResourceType = recursos[index],
+                    NumberToken = numberTokens[index],
+                    CubeX = hexagon.X,
+                    CubeY = hexagon.Y,
+                    CubeZ = hexagon.Z,
+                    CenterX = hexCenter.X,
+                    CenterY = hexCenter.Y
+                };
             })
             .ToList();
 
-        return new CatanBoardState
-        {
-            RobberTileId = 10,
-            Tiles = tiles,
-            Vertices = Enumerable.Range(1, 54)
-                .Select(id => new CatanVertexState
-                {
-                    VertexId = id
-                })
-                .ToList(),
-            Edges = Enumerable.Range(1, 72)
-                .Select(id => new CatanEdgeState
-                {
-                    EdgeId = id,
-                    VertexAId = ((id - 1) % 54) + 1,
-                    VertexBId = (id % 54) + 1
-                })
-                .ToList()
-        };
+        board.Vertices = vertices.Values.ToList();
+        board.Tiles = tiles;
+
+        return board;
     }
 
     private static GameSessionResponse ToResponse(CatanGameSessionState session, int usuarioId)
@@ -211,6 +228,8 @@ public sealed class CatanGameSessionService : IGameSessionService
                 SetupTurnOrder = [.. session.SetupTurnOrder],
                 LastPlacedSettlementVertexId = session.LastPlacedSettlementVertexId,
                 RobberTileId = session.Board.RobberTileId,
+                width = session.Board.width,
+                height = session.Board.height,
                 Tiles = session.Board.Tiles
                     .Select(tile => new CatanTileResponse
                     {
@@ -228,7 +247,10 @@ public sealed class CatanGameSessionService : IGameSessionService
                         VertexId = vertex.VertexId,
                         OwnerPlayerId = vertex.OwnerPlayerId,
                         BuildingType = vertex.BuildingType,
-                        IsAvailableForAction = vertex.OwnerPlayerId is null && canCurrentUserAct
+                        IsAvailableForAction = vertex.OwnerPlayerId is null && canCurrentUserAct,
+                        Resources = vertex.Resources,
+                        Ports = vertex.Ports,
+                        Position = vertex.Position
                     })
                     .ToList(),
                 Edges = session.Board.Edges
@@ -276,6 +298,8 @@ public sealed class CatanGameSessionService : IGameSessionService
         public List<CatanTileState> Tiles { get; set; } = [];
         public List<CatanVertexState> Vertices { get; set; } = [];
         public List<CatanEdgeState> Edges { get; set; } = [];
+        public int width { get; set; } = 1000;
+        public int height { get; set; } = 1000;
     }
 
     private sealed class CatanTileState
@@ -286,6 +310,8 @@ public sealed class CatanGameSessionService : IGameSessionService
         public int CubeX { get; set; }
         public int CubeY { get; set; }
         public int CubeZ { get; set; }
+        public double CenterX { get; set; }
+        public double CenterY { get; set; }
     }
 
     private sealed class CatanVertexState
@@ -293,6 +319,9 @@ public sealed class CatanGameSessionService : IGameSessionService
         public int VertexId { get; set; }
         public int? OwnerPlayerId { get; set; }
         public string? BuildingType { get; set; }
+        public (double, double) Position { get; set; }
+        public List<string> Resources { get; set; } = [];
+        public List<string> Ports { get; set; } = [];
     }
 
     private sealed class CatanEdgeState

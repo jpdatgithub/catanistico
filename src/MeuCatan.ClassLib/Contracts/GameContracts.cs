@@ -63,6 +63,8 @@ public class CatanGameStateResponse
     public List<CatanTileResponse> Tiles { get; set; } = [];
     public List<CatanVertexResponse> Vertices { get; set; } = [];
     public List<CatanEdgeResponse> Edges { get; set; } = [];
+    public int width { get; set; }
+    public int height { get; set; }
 }
 
 public class CatanTileResponse
@@ -81,6 +83,9 @@ public class CatanVertexResponse
     public int? OwnerPlayerId { get; set; }
     public string? BuildingType { get; set; }
     public bool IsAvailableForAction { get; set; }
+    public (double, double) Position { get; set; }
+    public List<string> Resources { get; set; } = [];
+    public List<string> Ports { get; set; } = [];
 }
 
 public class CatanEdgeResponse

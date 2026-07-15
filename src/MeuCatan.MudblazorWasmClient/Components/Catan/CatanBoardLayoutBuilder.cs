@@ -5,10 +5,10 @@ namespace MeuCatan.MudblazorWasmClient.Components.Catan;
 
 public static class CatanBoardLayoutBuilder
 {
-    public static CatanBoardSvgModel Build(CatanGameStateResponse state, double width = 1000, double height = 1000)
+    public static CatanBoardSvgModel Build(CatanGameStateResponse state)
     {
-        var centerX = width / 2.0;
-        var centerY = height / 2.0;
+        var centerX = state.width / 2.0;
+        var centerY = state.height / 2.0;
 
         var raio = 100.0; // Raio do hexágono em pixels
 
@@ -91,20 +91,16 @@ public static class CatanBoardLayoutBuilder
         var tiles = state.Tiles
             .Select(tile =>
             {
-                double deslocamentoX = raio * (Math.Sqrt(3) * tile.CubeX + Math.Sqrt(3) / 2.0 * tile.CubeZ);
-                double deslocamentoY = raio * (3.0 / 2.0 * tile.CubeZ);
-
-                double tileCenterX = centerX + deslocamentoX;
-                double tileCenterY = centerY + deslocamentoY;
+                var tileCenter = ClassLib.Utils.HexUtils.CubeToCenterPixel(centerX, centerY, tile.CubeX, tile.CubeY, tile.CubeZ, raio);
 
                 return new CatanSvgTile
                 {
                     TileId = tile.TileId,
                     ResourceType = tile.ResourceType,
                     NumberToken = tile.NumberToken,
-                    CenterX = tileCenterX,
-                    CenterY = tileCenterY,
-                    Points = CalcularPontosSvg(tileCenterX, tileCenterY, raio),
+                    CenterX = tileCenter.X,
+                    CenterY = tileCenter.Y,
+                    Points = JoinHexPointsString(tileCenter.X, tileCenter.Y, raio),
                     Fill = ResolveResourceColor(tile.ResourceType)
                 };
             })
@@ -114,8 +110,8 @@ public static class CatanBoardLayoutBuilder
 
         return new CatanBoardSvgModel
         {
-            Width = width,
-            Height = height,
+            Width = state.width,
+            Height = state.height,
             Tiles = tiles,
             Vertices = vertices.Values.OrderBy(vertex => vertex.VertexId).ToList(),
             Edges = edges
@@ -147,27 +143,9 @@ public static class CatanBoardLayoutBuilder
         double UnitCenterX,
         double UnitCenterY);
 
-    public static string CalcularPontosSvg(double centerX, double centerY, double radius)
+    public static string JoinHexPointsString(double centerX, double centerY, double raio)
     {
-        var pontos = new List<(double X, double Y)>();
-
-        for (int i = 0; i < 6; i++)
-        {
-            // Avança 60 graus no sentido horário (negativo no ciclo trigonométrico)
-            double anguloGraus = -30 - (i * 60);
-            double anguloRadianos = anguloGraus * (Math.PI / 180.0);
-
-            // Cálculo com inversão de Y para SVG
-            double x = centerX + radius * 0.95 * Math.Cos(anguloRadianos);
-            double y = centerY + radius * 0.95 * Math.Sin(anguloRadianos);
-
-            // Arredonda para 1 casa decimal
-            x = Math.Round(x, 1);
-            y = Math.Round(y, 1);
-
-            pontos.Add((x, y));
-        }
-
+        var pontos = ClassLib.Utils.HexUtils.CalcularPontosSvg(centerX, centerY, raio, 0.95);
         return string.Join(" ", pontos.Select(p => $"{p.X.ToString(CultureInfo.InvariantCulture)},{p.Y.ToString(CultureInfo.InvariantCulture)}"));
     }
 
