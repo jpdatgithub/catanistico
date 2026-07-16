@@ -145,7 +145,7 @@ public sealed class CatanGameSessionService : IGameSessionService
         OrderedTiles.AddRange(rotatedInner);
         OrderedTiles.Add((0, 0, 0));
 
-        var vertices = new Dictionary<(double X, double Y), CatanVertexState>();
+        var vertices = new Dictionary<Point, CatanVertexState>();
 
         var tiles = OrderedTiles
             .Select((hexagon, index) =>
@@ -160,7 +160,7 @@ public sealed class CatanGameSessionService : IGameSessionService
                             var catanVertex = new CatanVertexState
                             {
                                 VertexId = vertices.Count + 1,
-                                Position = point,
+                                Position = new Point(point.X, point.Y),
                                 Resources = [recursos[index]],
                             };
                             vertices[point] = catanVertex;
@@ -187,6 +187,7 @@ public sealed class CatanGameSessionService : IGameSessionService
 
         board.Vertices = vertices.Values.ToList();
         board.Tiles = tiles;
+        board.Edges = new List<CatanEdgeState>() { new CatanEdgeState { EdgeId = 1, VertexAId = 1, VertexBId = 2 } };
 
         return board;
     }
@@ -196,7 +197,7 @@ public sealed class CatanGameSessionService : IGameSessionService
         var currentPlayer = session.Players.First(player => player.UsuarioId == session.CurrentPlayerId);
         var canCurrentUserAct = currentPlayer.UsuarioId == usuarioId;
 
-        return new GameSessionResponse
+        var result = new GameSessionResponse
         {
             SalaId = session.SalaId,
             GameType = session.GameType,
@@ -265,6 +266,8 @@ public sealed class CatanGameSessionService : IGameSessionService
                     .ToList()
             }
         };
+
+        return result;
     }
 
     private sealed class CatanGameSessionState
@@ -319,7 +322,7 @@ public sealed class CatanGameSessionService : IGameSessionService
         public int VertexId { get; set; }
         public int? OwnerPlayerId { get; set; }
         public string? BuildingType { get; set; }
-        public (double, double) Position { get; set; }
+        public Point Position { get; set; }
         public List<string> Resources { get; set; } = [];
         public List<string> Ports { get; set; } = [];
     }

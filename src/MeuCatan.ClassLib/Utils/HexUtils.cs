@@ -1,3 +1,5 @@
+using MeuCatan.ClassLib.Contracts;
+
 namespace MeuCatan.ClassLib.Utils;
 
 public static class HexUtils
@@ -13,9 +15,9 @@ public static class HexUtils
         );
     }
 
-    public static List<(double X, double Y)> CalcularPontosSvg(double centerX, double centerY, double raio, double fator = 1.0)
+    public static List<Point> CalcularPontosSvg(double centerX, double centerY, double raio, double fator = 1.0)
     {
-        var pontos = new List<(double X, double Y)>();
+        var pontos = new List<Point>();
 
         for (int i = 0; i < 6; i++)
         {
@@ -31,7 +33,7 @@ public static class HexUtils
             x = Math.Round(x, 1);
             y = Math.Round(y, 1);
 
-            pontos.Add((x, y));
+            pontos.Add(new Point(x, y));
         }
 
         return pontos;

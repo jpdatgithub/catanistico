@@ -83,7 +83,7 @@ public class CatanVertexResponse
     public int? OwnerPlayerId { get; set; }
     public string? BuildingType { get; set; }
     public bool IsAvailableForAction { get; set; }
-    public (double, double) Position { get; set; }
+    public Point Position { get; set; }
     public List<string> Resources { get; set; } = [];
     public List<string> Ports { get; set; } = [];
 }
@@ -95,4 +95,16 @@ public class CatanEdgeResponse
     public int VertexBId { get; set; }
     public int? OwnerPlayerId { get; set; }
     public bool IsAvailableForAction { get; set; }
+}
+
+public struct Point
+{
+    public double X { get; set; }
+    public double Y { get; set; }
+
+    public Point(double x, double y)
+    {
+        X = x;
+        Y = y;
+    }
 }

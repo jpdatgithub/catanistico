@@ -105,7 +105,20 @@ public static class CatanBoardLayoutBuilder
                 };
             })
             .ToList();
-        var vertices = new Dictionary<int, CatanSvgVertex>();
+        var vertices = state.Vertices
+            .Select(vertex =>
+            {
+                return new CatanSvgVertex
+                {
+                    VertexId = vertex.VertexId,
+                    X = vertex.Position.X,
+                    Y = vertex.Position.Y,
+                    OwnerPlayerId = vertex.OwnerPlayerId,
+                    BuildingType = vertex.BuildingType,
+                    IsAvailableForAction = vertex.IsAvailableForAction
+                };
+            })
+            .ToList();
         var edges = new List<CatanSvgEdge>();
 
         return new CatanBoardSvgModel
@@ -113,7 +126,7 @@ public static class CatanBoardLayoutBuilder
             Width = state.width,
             Height = state.height,
             Tiles = tiles,
-            Vertices = vertices.Values.OrderBy(vertex => vertex.VertexId).ToList(),
+            Vertices = vertices,
             Edges = edges
         };
     }
