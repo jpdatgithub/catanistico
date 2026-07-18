@@ -20,19 +20,29 @@ else
                 @foreach (var tile in model.Tiles)
                 {
                     <polygon points="@tile.Points" fill="@tile.Fill" stroke="#2f2f2f" stroke-width="2" />
-                }
-                @foreach (var vertex in model.Vertices)
-                {
-                    <circle cx="@F(vertex.X)" cy="@F(vertex.Y)" r="6" fill="red" />
-                }
-                @foreach (var edge in model.Edges)
-                {
-                    <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)" stroke="blue" stroke-width="4" />
-                }
-            </g>
-        </svg>
-    </div>
-}
+                    if (tile.NumberToken != 7)
+                    {
+                        <circle cx="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
+                                cy="@((tile.CenterY - 20).ToString(CultureInfo.InvariantCulture))" r="20" fill="white" stroke="#2f2f2f"
+                                stroke-width="2" />
+                        <svg:text x="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
+                                  y="@( (tile.CenterY - 20).ToString(CultureInfo.InvariantCulture) )" text-anchor="middle" font-size="16"
+                                  fill="black">
+                            @tile.NumberToken</svg:text>
+                        }
+                    }
+                    @foreach (var vertex in model.Vertices)
+                    {
+                        <circle cx="@F(vertex.X)" cy="@F(vertex.Y)" r="6" fill="red" />
+                    }
+                    @foreach (var edge in model.Edges)
+                    {
+                        <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)" stroke="blue" stroke-width="4" />
+                    }
+                </g>
+            </svg>
+        </div>
+    }
 
 @code {
     private double CanvasWidth;
