@@ -105,6 +105,7 @@ public static class CatanBoardLayoutBuilder
                 };
             })
             .ToList();
+
         var vertices = state.Vertices
             .Select(vertex =>
             {
@@ -119,7 +120,26 @@ public static class CatanBoardLayoutBuilder
                 };
             })
             .ToList();
-        var edges = new List<CatanSvgEdge>();
+
+        var edges = state.Edges
+            .Select(edge =>
+            {
+                var vertexA = edge.PointA;
+                var vertexB = edge.PointB;
+
+                return new CatanSvgEdge
+                {
+                    smallerVertexId = edge.smallerVertexId,
+                    biggerVertexId = edge.biggerVertexId,
+                    X1 = vertexA.X,
+                    Y1 = vertexA.Y,
+                    X2 = vertexB.X,
+                    Y2 = vertexB.Y,
+                    OwnerPlayerId = edge.OwnerPlayerId,
+                    IsAvailableForAction = edge.IsAvailableForAction
+                };
+            })
+            .ToList();
 
         return new CatanBoardSvgModel
         {
@@ -209,7 +229,8 @@ public sealed class CatanSvgVertex
 
 public sealed class CatanSvgEdge
 {
-    public int EdgeId { get; init; }
+    public int smallerVertexId { get; set; }
+    public int biggerVertexId { get; set; }
     public double X1 { get; init; }
     public double Y1 { get; init; }
     public double X2 { get; init; }

@@ -146,30 +146,71 @@ public sealed class CatanGameSessionService : IGameSessionService
         OrderedTiles.Add((0, 0, 0));
 
         var vertices = new Dictionary<Point, CatanVertexState>();
+        var edges = new Dictionary<EdgeKey, CatanEdgeState>();
 
         var tiles = OrderedTiles
             .Select((hexagon, index) =>
             {
                 var hexCenter = CubeToCenterPixel(board.width / 2.0, board.height / 2.0, hexagon.X, hexagon.Y, hexagon.Z, 100.0);
 
-                CalcularPontosSvg(hexCenter.X, hexCenter.Y, 100.0)
-                    .ForEach(point =>
+                var previousVertex = new CatanVertexState();
+                var firstVertex = new CatanVertexState();
+
+                var points = CalcularPontosSvg(hexCenter.X, hexCenter.Y, 100.0);
+                for (int i = 0; i < points.Count; i++)
+                {
+                    var point = points[i];
+
+                    var catanVertex = new CatanVertexState
                     {
-                        if (!vertices.ContainsKey(point))
+                        Position = new Point(point.X, point.Y),
+                    };
+
+                    if (!vertices.ContainsKey(point))
+                    {
+                        catanVertex.VertexId = vertices.Count + 1;
+                        vertices[point] = catanVertex;
+                    }
+                    else
+                    {
+                        catanVertex.VertexId = vertices[point].VertexId;
+                    }
+
+                    vertices[point].Resources.Add(recursos[index]);
+
+                    if (i != 0)
+                    {
+                        var edgeKey = new EdgeKey(previousVertex.VertexId, catanVertex.VertexId);
+                        if (!edges.ContainsKey(edgeKey))
                         {
-                            var catanVertex = new CatanVertexState
+                            edges[edgeKey] = new CatanEdgeState
                             {
-                                VertexId = vertices.Count + 1,
-                                Position = new Point(point.X, point.Y),
-                                Resources = [recursos[index]],
+                                EdgeKey = edgeKey,
+                                PointA = previousVertex.Position,
+                                PointB = catanVertex.Position
                             };
-                            vertices[point] = catanVertex;
                         }
-                        else
+
+                        if (i == points.Count - 1)
                         {
-                            vertices[point].Resources.Add(recursos[index]);
+                            edgeKey = new EdgeKey(catanVertex.VertexId, firstVertex.VertexId);
+                            if (!edges.ContainsKey(edgeKey))
+                            {
+                                edges[edgeKey] = new CatanEdgeState
+                                {
+                                    EdgeKey = edgeKey,
+                                    PointA = catanVertex.Position,
+                                    PointB = firstVertex.Position
+                                };
+                            }
                         }
-                    });
+                    }
+                    else
+                    {
+                        firstVertex = catanVertex;
+                    }
+                    previousVertex = catanVertex;
+                }
 
                 return new CatanTileState
                 {
@@ -187,7 +228,7 @@ public sealed class CatanGameSessionService : IGameSessionService
 
         board.Vertices = vertices.Values.ToList();
         board.Tiles = tiles;
-        board.Edges = new List<CatanEdgeState>() { new CatanEdgeState { EdgeId = 1, VertexAId = 1, VertexBId = 2 } };
+        board.Edges = edges.Values.ToList();
 
         return board;
     }
@@ -257,11 +298,12 @@ public sealed class CatanGameSessionService : IGameSessionService
                 Edges = session.Board.Edges
                     .Select(edge => new CatanEdgeResponse
                     {
-                        EdgeId = edge.EdgeId,
-                        VertexAId = edge.VertexAId,
-                        VertexBId = edge.VertexBId,
+                        smallerVertexId = edge.EdgeKey.smallerVertexId,
+                        biggerVertexId = edge.EdgeKey.biggerVertexId,
                         OwnerPlayerId = edge.OwnerPlayerId,
-                        IsAvailableForAction = false
+                        IsAvailableForAction = false,
+                        PointA = edge.PointA,
+                        PointB = edge.PointB
                     })
                     .ToList()
             }
@@ -319,7 +361,7 @@ public sealed class CatanGameSessionService : IGameSessionService
 
     private sealed class CatanVertexState
     {
-        public int VertexId { get; set; }
+        public int VertexId { get; set; } = 0;
         public int? OwnerPlayerId { get; set; }
         public string? BuildingType { get; set; }
         public Point Position { get; set; }
@@ -329,11 +371,13 @@ public sealed class CatanGameSessionService : IGameSessionService
 
     private sealed class CatanEdgeState
     {
-        public int EdgeId { get; set; }
-        public int VertexAId { get; set; }
-        public int VertexBId { get; set; }
+        public EdgeKey EdgeKey { get; set; }
         public int? OwnerPlayerId { get; set; }
+        public Point PointA { get; set; }
+        public Point PointB { get; set; }
     }
+
+
 }
 
 public sealed class RoomGameStartContext

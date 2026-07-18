@@ -88,13 +88,35 @@ public class CatanVertexResponse
     public List<string> Ports { get; set; } = [];
 }
 
+public readonly record struct EdgeKey
+{
+    public int smallerVertexId { get; }
+    public int biggerVertexId { get; }
+
+    public EdgeKey(int vertex1, int vertex2)
+    {
+        //o id menor será sempre o A
+        if (vertex1 < vertex2)
+        {
+            smallerVertexId = vertex1;
+            biggerVertexId = vertex2;
+        }
+        else
+        {
+            smallerVertexId = vertex2;
+            biggerVertexId = vertex1;
+        }
+    }
+}
+
 public class CatanEdgeResponse
 {
-    public int EdgeId { get; set; }
-    public int VertexAId { get; set; }
-    public int VertexBId { get; set; }
+    public int smallerVertexId { get; set; }
+    public int biggerVertexId { get; set; }
     public int? OwnerPlayerId { get; set; }
     public bool IsAvailableForAction { get; set; }
+    public Point PointA { get; set; }
+    public Point PointB { get; set; }
 }
 
 public struct Point

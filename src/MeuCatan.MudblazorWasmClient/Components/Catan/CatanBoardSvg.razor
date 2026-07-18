@@ -25,7 +25,10 @@ else
                 {
                     <circle cx="@F(vertex.X)" cy="@F(vertex.Y)" r="6" fill="red" />
                 }
-
+                @foreach (var edge in model.Edges)
+                {
+                    <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)" stroke="blue" stroke-width="4" />
+                }
             </g>
         </svg>
     </div>
