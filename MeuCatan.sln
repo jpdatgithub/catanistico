@@ -1,5 +1,4 @@
-﻿
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -10,8 +9,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MeuCatan.MudblazorWasmClient", "src\MeuCatan.MudblazorWasmClient\MeuCatan.MudblazorWasmClient.csproj", "{16C0829D-50AD-4A9D-B34E-75DE1690247F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MeuCatan.Api", "src\MeuCatan.Api\MeuCatan.Api.csproj", "{8442D5AA-EDD9-4D7C-959F-F792D96067AF}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MeuCatan.Tests", "tests\MeuCatan.Tests\MeuCatan.Tests.csproj", "{C53B3738-D49E-455C-90F0-D0675E42EC55}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -59,18 +56,6 @@ Global
 		{8442D5AA-EDD9-4D7C-959F-F792D96067AF}.Release|x64.Build.0 = Release|Any CPU
 		{8442D5AA-EDD9-4D7C-959F-F792D96067AF}.Release|x86.ActiveCfg = Release|Any CPU
 		{8442D5AA-EDD9-4D7C-959F-F792D96067AF}.Release|x86.Build.0 = Release|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Debug|x64.Build.0 = Debug|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Debug|x86.Build.0 = Debug|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Release|Any CPU.Build.0 = Release|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Release|x64.ActiveCfg = Release|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Release|x64.Build.0 = Release|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Release|x86.ActiveCfg = Release|Any CPU
-		{C53B3738-D49E-455C-90F0-D0675E42EC55}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -79,6 +64,5 @@ Global
 		{DBD00D1B-EE6E-49BD-A0F9-D9B141CC7761} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{16C0829D-50AD-4A9D-B34E-75DE1690247F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{8442D5AA-EDD9-4D7C-959F-F792D96067AF} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{C53B3738-D49E-455C-90F0-D0675E42EC55} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
