@@ -13,13 +13,15 @@ public interface ILobbyRoomService
     LobbyOperationResult<LobbyDetalheSalaResponse> SelecionarJogo(int salaId, int usuarioId, LobbySelecionarJogoRequest request);
     LobbyOperationResult<LobbyDetalheSalaResponse> AlterarPronto(int salaId, int usuarioId, bool isReady);
     LobbyOperationResult<LobbyIniciarJogoResponse> IniciarJogo(int salaId, int usuarioId);
-    LobbyOperationResult<LobbyDetalheSalaResponse> UpdatePlayerPresence(int salaId, int usuarioId);
+    LobbyOperationResult<LobbyDetalheSalaResponse> UpdatePlayerPresence(int salaId, int usuarioId, bool inLobby);
 }
 
 public sealed class LobbyRoomService : ILobbyRoomService
 {
     private static readonly TimeSpan GuestInactivityGraceWindow = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan PresenceOnlineWindow = TimeSpan.FromSeconds(20);
+    private const string PresenceSourceRoom = "sala";
+    private const string PresenceSourceLobby = "lobby";
 
     private readonly ILobbyGameCatalogService _gameCatalogService;
     private readonly IGameSessionService _gameSessionService;
@@ -111,6 +113,11 @@ public sealed class LobbyRoomService : ILobbyRoomService
 
         return _roomStore.Write(store =>
         {
+            if (TryGetUserRoom(store, usuarioId) is not null)
+            {
+                return LobbyOperationResult<LobbyCriarSalaResponse>.Conflict("Você já está em uma sala. Saia da sala atual para criar outra.");
+            }
+
             var salaId = store.NextRoomId();
             var sala = new LobbyRoomState
             {
@@ -135,7 +142,8 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 IsGuest = isGuest,
                 IsReady = false,
                 EntrouEmUtc = DateTime.UtcNow,
-                LastSeenUtc = DateTime.UtcNow
+                LastSeenUtc = DateTime.UtcNow,
+                PresenceSource = PresenceSourceRoom
             });
 
             store.Save(sala);
@@ -180,6 +188,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
             if (sala.Jogadores.TryGetValue(usuarioId, out var jogador))
             {
                 jogador.LastSeenUtc = DateTime.UtcNow;
+                jogador.PresenceSource = PresenceSourceRoom;
                 store.Save(sala);
             }
 
@@ -191,6 +200,12 @@ public sealed class LobbyRoomService : ILobbyRoomService
     {
         return _roomStore.Write(store =>
         {
+            var salaAtualDoUsuario = TryGetUserRoom(store, usuarioId);
+            if (salaAtualDoUsuario is not null && salaAtualDoUsuario.SalaId != salaId)
+            {
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.Conflict("Você já está em uma sala. Saia da sala atual para entrar em outra.");
+            }
+
             var sala = store.GetRoomOrDefault(salaId);
             if (sala is null)
             {
@@ -213,6 +228,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
             if (sala.Jogadores.ContainsKey(usuarioId))
             {
                 sala.Jogadores[usuarioId].LastSeenUtc = DateTime.UtcNow;
+                sala.Jogadores[usuarioId].PresenceSource = PresenceSourceRoom;
                 store.Save(sala);
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
             }
@@ -243,7 +259,8 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 IsGuest = isGuest,
                 IsReady = false,
                 EntrouEmUtc = DateTime.UtcNow,
-                LastSeenUtc = DateTime.UtcNow
+                LastSeenUtc = DateTime.UtcNow,
+                PresenceSource = PresenceSourceRoom
             });
 
             sala.Fase = LobbyFaseSala.Setup;
@@ -306,6 +323,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
             }
             else
             {
+                store.Save(sala);
                 _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
             }
 
@@ -502,7 +520,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
         });
     }
 
-    public LobbyOperationResult<LobbyDetalheSalaResponse> UpdatePlayerPresence(int salaId, int usuarioId)
+    public LobbyOperationResult<LobbyDetalheSalaResponse> UpdatePlayerPresence(int salaId, int usuarioId, bool inLobby)
     {
         return _roomStore.Write(store =>
         {
@@ -530,6 +548,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
             }
 
             jogador.LastSeenUtc = DateTime.UtcNow;
+            jogador.PresenceSource = inLobby ? PresenceSourceLobby : PresenceSourceRoom;
             store.Save(sala);
 
             return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
@@ -569,15 +588,20 @@ public sealed class LobbyRoomService : ILobbyRoomService
             MinJogadores = sala.MinJogadores,
             Jogadores = sala.Jogadores.Values
                 .OrderBy(j => j.EntrouEmUtc)
-                .Select(j => new LobbyJogadorResponse
+                .Select(j =>
                 {
-                    UsuarioId = j.UsuarioId,
-                    Nome = j.Nome,
-                    IsGuest = j.IsGuest,
-                    IsCreator = j.UsuarioId == sala.CriadorId,
-                    IsReady = j.IsReady,
-                    LastSeenUtc = j.LastSeenUtc,
-                    IsOnline = DateTime.UtcNow - j.LastSeenUtc <= PresenceOnlineWindow
+                    var isOnline = DateTime.UtcNow - j.LastSeenUtc <= PresenceOnlineWindow;
+                    return new LobbyJogadorResponse
+                    {
+                        UsuarioId = j.UsuarioId,
+                        Nome = j.Nome,
+                        IsGuest = j.IsGuest,
+                        IsCreator = j.UsuarioId == sala.CriadorId,
+                        IsReady = j.IsReady,
+                        LastSeenUtc = j.LastSeenUtc,
+                        IsOnline = isOnline,
+                        IsInLobby = isOnline && string.Equals(j.PresenceSource, PresenceSourceLobby, StringComparison.OrdinalIgnoreCase)
+                    };
                 })
                 .ToList()
         };
@@ -625,6 +649,11 @@ public sealed class LobbyRoomService : ILobbyRoomService
 
         store.Save(sala);
         return true;
+    }
+
+    private static LobbyRoomState? TryGetUserRoom(LobbyRoomStoreWriteContext store, int usuarioId)
+    {
+        return store.Rooms.FirstOrDefault(room => room.Jogadores.ContainsKey(usuarioId));
     }
 
     private LobbyOperationResult<LobbyJogoDisponivelResponse> ObterJogoOuErro(string? gameType)

@@ -276,9 +276,13 @@ namespace MeuCatan.MudblazorWasmClient.Services
                 : (true, data, null);
         }
 
-        public async Task<(bool Success, LobbyDetalheSalaResponse? Data, string? ErrorMessage)> EnviarHeartbeatSalaAsync(int salaId)
+        public async Task<(bool Success, LobbyDetalheSalaResponse? Data, string? ErrorMessage)> EnviarHeartbeatSalaAsync(int salaId, bool inLobby = false)
         {
-            using var request = await CreateAuthenticatedRequestAsync(HttpMethod.Post, $"api/lobby/salas/{salaId}/heartbeat");
+            var heartbeatUrl = inLobby
+                ? $"api/lobby/salas/{salaId}/heartbeat?inLobby=true"
+                : $"api/lobby/salas/{salaId}/heartbeat";
+
+            using var request = await CreateAuthenticatedRequestAsync(HttpMethod.Post, heartbeatUrl);
             if (request is null)
             {
                 return (false, null, "Sessão inválida.");

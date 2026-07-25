@@ -27,4 +27,5 @@ public sealed class LobbyPlayerState
     public bool IsReady { get; set; }
     public DateTime EntrouEmUtc { get; set; }
     public DateTime LastSeenUtc { get; set; }
+    public string PresenceSource { get; set; } = "sala";
 }

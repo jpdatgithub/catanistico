@@ -1,0 +1,18 @@
+.resource-panel {
+    border: 1px solid var(--mud-palette-lines-default);
+}
+
+.resource-hand-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+@media (max-width: 960px) {
+    .resource-hand-row {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 4px;
+    }
+}

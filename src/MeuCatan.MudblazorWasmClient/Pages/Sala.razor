@@ -27,6 +27,10 @@
                     <MudText Typo="Typo.body2">Criador: @_sala.CriadorNome</MudText>
                 </MudStack>
                 <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Visibility"
+                               OnClick="IrParaLobbySemSairAsync" Disabled="@_acaoEmAndamento">
+                        Lobby
+                    </MudButton>
                     <MudButton Variant="Variant.Outlined" OnClick="AtualizarSalaAsync" Disabled="@_acaoEmAndamento">
                         Atualizar</MudButton>
                         <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="SairDaSalaAsync"
@@ -66,7 +70,10 @@
                                                 }
                                                 @if (jogador.IsOnline)
                                                 {
-                                                    <MudChip Size="Size.Small" Color="Color.Success">Online</MudChip>
+                                                    <MudChip Size="Size.Small"
+                                                             Color="@(jogador.IsInLobby ? Color.Info : Color.Success)">
+                                                        @(jogador.IsInLobby ? "No lobby" : "Online")
+                                                    </MudChip>
                                                 }
                                                 else
                                                 {
@@ -306,6 +313,11 @@
         _mensagem = null;
         _acaoEmAndamento = true;
 
+        if (_pollingCancellation is not null)
+        {
+            await _pollingCancellation.CancelAsync();
+        }
+
         var result = await AuthService.SairSalaAsync(SalaId);
 
         _acaoEmAndamento = false;
@@ -316,7 +328,13 @@
             return;
         }
 
-        Navigation.NavigateTo("/lobby");
+        Navigation.NavigateTo("/");
+    }
+
+    private Task IrParaLobbySemSairAsync()
+    {
+        Navigation.NavigateTo("/");
+        return Task.CompletedTask;
     }
 
     private async Task IniciarPollingAsync(CancellationToken cancellationToken)

@@ -63,7 +63,7 @@
 
                 <MudItem xs="12" md="6">
                     <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h5" Class="mb-2">Tabuleiro de Catan</MudText>
+                        @* <MudText Typo="Typo.h5" Class="mb-2">Tabuleiro de Catan</MudText>
                         <MudText Typo="Typo.body2" Class="mb-4">
                             Este primeiro corte já carrega uma sessão real e um board SVG do Catan. As ações interativas de
                             colocação inicial entram no próximo passo.
@@ -72,13 +72,24 @@
                         <MudText Typo="Typo.body2" Class="mb-2">
                             Quando o setup estiver no seu turno, clique no destaque verde para executar sua ação: vértice para
                             aldeia e aresta para estrada.
-                        </MudText>
+                        </MudText> *@
 
                         @if (_session.CatanState is not null)
                         {
                             <CatanBoardSvg State="_session.CatanState" DisplayWidth="900" DisplayHeight="600"
                                            OnVertexClicked="ExecutarPosicionamentoInicialAsync"
                                            OnEdgeClicked="ExecutarPosicionamentoEstradaInicialAsync" />
+                        }
+
+                        @{
+                            var currentPlayer = _session.Players.FirstOrDefault(player => player.UsuarioId ==
+                _session.YourPlayerId);
+                        }
+                        @if (currentPlayer is not null)
+                        {
+                            <div class="mt-4">
+                                <PlayerResourcePanel Player="currentPlayer" />
+                            </div>
                         }
                     </MudPaper>
                 </MudItem>

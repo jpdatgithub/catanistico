@@ -111,6 +111,7 @@ public class LobbyJogadorResponse
     public bool IsReady { get; set; }
     public DateTime LastSeenUtc { get; set; }
     public bool IsOnline { get; set; }
+    public bool IsInLobby { get; set; }
 }
 
 public class LobbySairSalaResponse

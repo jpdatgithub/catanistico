@@ -27,6 +27,7 @@ public sealed class InMemoryLobbyRoomStore : ILobbyRoomStore
         lock (_lock)
         {
             return mutation(new LobbyRoomStoreWriteContext(
+                () => _rooms.Values.ToList(),
                 salaId => _rooms.GetValueOrDefault(salaId),
                 () => ++_lastRoomId,
                 room => _rooms[room.SalaId] = room,
@@ -56,22 +57,27 @@ public sealed class LobbyRoomStoreReadContext
 
 public sealed class LobbyRoomStoreWriteContext
 {
+    private readonly Func<IReadOnlyCollection<LobbyRoomState>> _getRooms;
     private readonly Func<int, LobbyRoomState?> _getRoom;
     private readonly Func<int> _nextRoomId;
     private readonly Action<LobbyRoomState> _save;
     private readonly Func<int, bool> _remove;
 
     internal LobbyRoomStoreWriteContext(
+        Func<IReadOnlyCollection<LobbyRoomState>> getRooms,
         Func<int, LobbyRoomState?> getRoom,
         Func<int> nextRoomId,
         Action<LobbyRoomState> save,
         Func<int, bool> remove)
     {
+        _getRooms = getRooms;
         _getRoom = getRoom;
         _nextRoomId = nextRoomId;
         _save = save;
         _remove = remove;
     }
+
+    public IReadOnlyCollection<LobbyRoomState> Rooms => _getRooms();
 
     public LobbyRoomState? GetRoomOrDefault(int salaId)
     {

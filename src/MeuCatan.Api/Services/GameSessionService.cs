@@ -28,6 +28,7 @@ public sealed class CatanGameSessionService : IGameSessionService
     [
         5, 2, 6, 3, 8, 10, 9, 12, 11, 4, 8, 10, 9, 4, 5, 6, 3, 11
     ];
+    private const string DesertResourceType = "deserto";
 
     private readonly IGameSessionStore _sessionStore;
     private readonly IGameStateEventPublisher _gameStateEventPublisher;
@@ -207,6 +208,11 @@ public sealed class CatanGameSessionService : IGameSessionService
         session.AwaitingInitialRoadPlacement = true;
         session.PendingInitialRoadFromVertexId = vertex.VertexId;
 
+        if (IsSecondSetupSettlementPlacement(session))
+        {
+            GrantSetupResourcesFromVertex(actingPlayer, vertex);
+        }
+
         return null;
     }
 
@@ -276,6 +282,32 @@ public sealed class CatanGameSessionService : IGameSessionService
             : [];
 
         return [.. playerIds, .. reverse];
+    }
+
+    private static bool IsSecondSetupSettlementPlacement(CatanGameSessionState session)
+    {
+        if (session.SetupTurnOrder.Count == 0)
+        {
+            return false;
+        }
+
+        var secondPlacementStart = session.SetupTurnOrder.Count / 2;
+        return session.SetupStepIndex >= secondPlacementStart;
+    }
+
+    private static void GrantSetupResourcesFromVertex(CatanPlayerState player, CatanVertexState vertex)
+    {
+        foreach (var resourceType in vertex.Resources)
+        {
+            if (string.IsNullOrWhiteSpace(resourceType)
+                || string.Equals(resourceType, DesertResourceType, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            player.Resources.TryGetValue(resourceType, out var currentAmount);
+            player.Resources[resourceType] = currentAmount + 1;
+        }
     }
 
     private static bool HasAdjacentSettlement(CatanGameSessionState session, int vertexId)

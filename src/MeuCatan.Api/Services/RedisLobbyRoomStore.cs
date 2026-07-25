@@ -21,6 +21,7 @@ public sealed class RedisLobbyRoomStore : ILobbyRoomStore
         using var lockHandle = RedisStoreLockHandle.Acquire(_database, RedisStateStoreKeys.LobbyWriteLock);
 
         return mutation(new LobbyRoomStoreWriteContext(
+            ListRooms,
             GetRoomOrDefault,
             NextRoomId,
             SaveRoom,

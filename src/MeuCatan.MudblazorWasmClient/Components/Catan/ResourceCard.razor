@@ -1,0 +1,44 @@
+<div class="resource-card-shell">
+    @if (Count > 2)
+    {
+        <div class="resource-card-layer @ResourceClass layer-back"></div>
+    }
+
+    @if (Count > 1)
+    {
+        <div class="resource-card-layer @ResourceClass layer-middle"></div>
+    }
+
+    <div class="resource-card @ResourceClass">
+        <span class="resource-name">@DisplayName</span>
+        <span class="resource-count">@Count</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string ResourceType { get; set; } = string.Empty;
+
+    [Parameter]
+    public int Count { get; set; }
+
+    private string ResourceClass => ResourceType.ToLowerInvariant() switch
+    {
+        "madeira" => "resource-madeira",
+        "argila" => "resource-argila",
+        "ovelha" => "resource-ovelha",
+        "trigo" => "resource-trigo",
+        "pedra" => "resource-pedra",
+        _ => "resource-default"
+    };
+
+    private string DisplayName => ResourceType.ToLowerInvariant() switch
+    {
+        "madeira" => "Madeira",
+        "argila" => "Argila",
+        "ovelha" => "Ovelha",
+        "trigo" => "Trigo",
+        "pedra" => "Pedra",
+        _ => ResourceType
+    };
+}

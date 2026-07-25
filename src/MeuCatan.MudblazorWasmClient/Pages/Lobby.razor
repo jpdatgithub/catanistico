@@ -1,4 +1,5 @@
 @page "/"
+@implements IAsyncDisposable
 
 @inject ClienteAuthService AuthService
 @inject ClienteAuthStateProvider AuthStateProvider
@@ -30,6 +31,13 @@
         @if (!string.IsNullOrWhiteSpace(_erroGeral))
         {
             <MudAlert Severity="Severity.Error">@_erroGeral</MudAlert>
+        }
+
+        @if (_usuarioEmAlgumaSala)
+        {
+            <MudAlert Severity="Severity.Warning">
+                Você já está em uma sala. Saia dela para criar nova sala ou entrar em outra.
+            </MudAlert>
         }
 
         @if (_perfil is not null)
@@ -77,7 +85,7 @@
                     </MudItem>
                 </MudGrid>
                 <MudStack Row="true" Spacing="2" Class="mt-3" AlignItems="AlignItems.Center">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@_criandoSala"
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@_criacaoDesabilitada"
                                OnClick="CriarSalaAsync">
                         @(_criandoSala ? "Criando..." : "Criar sala")
                     </MudButton>
@@ -134,7 +142,8 @@
                                 }
                                 else
                                 {
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@_acaoEmAndamento"
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                               Disabled="@(_acaoEmAndamento || _usuarioEmAlgumaSala)"
                                                OnClick="() => EntrarSalaAsync(sala.SalaId)">
                                         Entrar
                                     </MudButton>
@@ -163,8 +172,12 @@
 
     private bool _podeAtualizar = true;
     private int _segundosRestantesRefresh;
+    private CancellationTokenSource? _presenceCancellation;
+    private Task? _presenceTask;
 
     private bool _podeCriarSala => _perfil is not null && !_perfil.IsGuest;
+    private bool _usuarioEmAlgumaSala => _salas.Any(sala => sala.UsuarioNaSala);
+    private bool _criacaoDesabilitada => _criandoSala || _usuarioEmAlgumaSala;
     private int CapacidadeMinimaSelecionada => JogoSelecionado?.MinPlayers ?? 2;
     private int CapacidadeMaximaSelecionada => JogoSelecionado?.MaxPlayers ?? 8;
     private LobbyJogoDisponivelResponse? JogoSelecionado => _jogosDisponiveis.FirstOrDefault(j => j.GameType ==
@@ -184,6 +197,9 @@ _novaSala.GameType);
 
         _perfil = await AuthService.GetProfileAsync();
         await AtualizarSalasAsync();
+
+        _presenceCancellation = new CancellationTokenSource();
+        _presenceTask = IniciarHeartbeatPresencaSalaAsync(_presenceCancellation.Token);
     }
 
     private async Task AtualizarSalasAsync()
@@ -228,6 +244,12 @@ _novaSala.GameType);
             return;
         }
 
+        if (_usuarioEmAlgumaSala)
+        {
+            _erroGeral = "Você já está em uma sala. Saia da sala atual para criar outra.";
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_novaSala.Nome))
         {
             _erroGeral = "Informe o nome da sala.";
@@ -267,6 +289,13 @@ _novaSala.GameType);
         _erroGeral = null;
         _acaoEmAndamento = true;
 
+        if (_usuarioEmAlgumaSala)
+        {
+            _acaoEmAndamento = false;
+            _erroGeral = "Você já está em uma sala. Saia da sala atual para entrar em outra.";
+            return;
+        }
+
         _codigoPrivadoPorSala.TryGetValue(salaId, out var codigoPrivado);
 
         var result = await AuthService.EntrarSalaAsync(salaId, codigoPrivado);
@@ -295,6 +324,14 @@ _novaSala.GameType);
         {
             _erroGeral = result.ErrorMessage;
             return;
+        }
+
+        var salaAtual = _salas.FirstOrDefault(sala => sala.SalaId == salaId);
+        if (salaAtual is not null)
+        {
+            salaAtual.UsuarioNaSala = false;
+            salaAtual.JogadoresAtuais = Math.Max(0, salaAtual.JogadoresAtuais - 1);
+            await InvokeAsync(StateHasChanged);
         }
 
         await AtualizarSalasSemCooldownAsync();
@@ -350,5 +387,64 @@ _novaSala.GameType);
 
         _podeAtualizar = true;
         StateHasChanged();
+    }
+
+    private async Task IniciarHeartbeatPresencaSalaAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(12));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                var salaAtualId = _salas.FirstOrDefault(sala => sala.UsuarioNaSala)?.SalaId;
+                if (salaAtualId is null)
+                {
+                    continue;
+                }
+
+                var heartbeatResult = await AuthService.EnviarHeartbeatSalaAsync(salaAtualId.Value, inLobby: true);
+                if (!heartbeatResult.Success || heartbeatResult.Data is null)
+                {
+                    continue;
+                }
+
+                AtualizarResumoSala(heartbeatResult.Data);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void AtualizarResumoSala(LobbyDetalheSalaResponse detalheSala)
+    {
+        var sala = _salas.FirstOrDefault(item => item.SalaId == detalheSala.SalaId);
+        if (sala is null)
+        {
+            return;
+        }
+
+        sala.Fase = detalheSala.Fase;
+        sala.JogadoresAtuais = detalheSala.JogadoresAtuais;
+        sala.CapacidadeMaxima = detalheSala.CapacidadeMaxima;
+        sala.GameType = detalheSala.GameType;
+        sala.GameDisplayName = detalheSala.GameDisplayName;
+        sala.UsuarioNaSala = detalheSala.CurrentUserIsInRoom;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_presenceCancellation is not null)
+        {
+            await _presenceCancellation.CancelAsync();
+            _presenceCancellation.Dispose();
+        }
+
+        if (_presenceTask is not null)
+        {
+            await _presenceTask;
+        }
     }
 }
