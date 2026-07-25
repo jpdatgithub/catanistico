@@ -1,50 +1,46 @@
 @inherits LayoutComponentBase
-@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <MudThemeProvider Theme="@_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-@if (_isAuthenticated)
-{
-    <MudLayout>
-        <MudAppBar Elevation="1">
-            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
-                           OnClick="@DrawerToggle" />
-            <MudText Typo="Typo.h6" Class="ml-2">Application</MudText>
-            <MudSpacer />
-            <MudIconButton Icon="@(DarkLightModeButtonIcon)" Color="Color.Inherit" OnClick="@DarkModeToggle" />
-            <MudLink Href="https://learn.microsoft.com/aspnet/core/" Target="_blank" Color="Color.Inherit"
-                     Underline="Underline.None">
-                About
-            </MudLink>
-        </MudAppBar>
+<AuthorizeView>
+    <Authorized>
+        <MudLayout>
+            <MudAppBar Elevation="1">
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                               OnClick="@DrawerToggle" />
+                <MudText Typo="Typo.h6" Class="ml-2">Application</MudText>
+                <MudSpacer />
+                <MudIconButton Icon="@(DarkLightModeButtonIcon)" Color="Color.Inherit" OnClick="@DarkModeToggle" />
+                <MudIconButton Href="/profile" Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit"
+                               Edge="Edge.End" aria-label="Abrir perfil" />
+            </MudAppBar>
 
-        <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
-            <NavMenu />
-        </MudDrawer>
+            <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+                <NavMenu />
+            </MudDrawer>
 
-        <MudMainContent Class="pt-16 pa-4">
-            @Body
-        </MudMainContent>
-    </MudLayout>
-}
-else
-{
-    <MudLayout>
-        <MudMainContent>
-            @Body
-        </MudMainContent>
-    </MudLayout>
-}
+            <MudMainContent Class="pt-16 pa-4">
+                @Body
+            </MudMainContent>
+        </MudLayout>
+    </Authorized>
+    <NotAuthorized>
+        <MudLayout>
+            <MudMainContent>
+                @Body
+            </MudMainContent>
+        </MudLayout>
+    </NotAuthorized>
+</AuthorizeView>
 
 
 @code {
-    private bool _drawerOpen = true;
+    private bool _drawerOpen = false;
     private bool _isDarkMode = true;
     private MudTheme? _theme;
-    private bool _isAuthenticated = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -56,9 +52,6 @@ else
             PaletteDark = _darkPalette,
             LayoutProperties = new LayoutProperties()
         };
-
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        _isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
     }
 
     private void DrawerToggle()

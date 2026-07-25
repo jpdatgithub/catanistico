@@ -92,6 +92,7 @@ public class LobbyDetalheSalaResponse
     public string GameType { get; set; } = LobbyTipoJogo.CatanBase;
     public string GameDisplayName { get; set; } = string.Empty;
     public LobbyFaseSala Fase { get; set; } = LobbyFaseSala.Lobby;
+    public bool CurrentUserIsInRoom { get; set; }
     public bool CurrentUserIsCreator { get; set; }
     public bool CurrentUserIsReady { get; set; }
     public bool CanCurrentUserSelectGame { get; set; }
@@ -108,6 +109,8 @@ public class LobbyJogadorResponse
     public bool IsGuest { get; set; }
     public bool IsCreator { get; set; }
     public bool IsReady { get; set; }
+    public DateTime LastSeenUtc { get; set; }
+    public bool IsOnline { get; set; }
 }
 
 public class LobbySairSalaResponse

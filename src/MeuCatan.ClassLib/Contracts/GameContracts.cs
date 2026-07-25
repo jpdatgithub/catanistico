@@ -45,6 +45,8 @@ public class GameActionRequest
     public string ActionType { get; set; } = string.Empty;
     public int? VertexId { get; set; }
     public int? EdgeId { get; set; }
+    public int? SmallerVertexId { get; set; }
+    public int? BiggerVertexId { get; set; }
 }
 
 public class GameActionResult
@@ -54,11 +56,22 @@ public class GameActionResult
     public GameSessionResponse? UpdatedSession { get; set; }
 }
 
+public class GameChatMessageResponse
+{
+    public int SalaId { get; set; }
+    public int UsuarioId { get; set; }
+    public string UsuarioNome { get; set; } = string.Empty;
+    public string Mensagem { get; set; } = string.Empty;
+    public DateTime EnviadaEmUtc { get; set; }
+}
+
 public class CatanGameStateResponse
 {
     public int SetupStepIndex { get; set; }
     public List<int> SetupTurnOrder { get; set; } = [];
     public int? LastPlacedSettlementVertexId { get; set; }
+    public bool AwaitingInitialRoadPlacement { get; set; }
+    public int? PendingInitialRoadFromVertexId { get; set; }
     public int? RobberTileId { get; set; }
     public List<CatanTileResponse> Tiles { get; set; } = [];
     public List<CatanVertexResponse> Vertices { get; set; } = [];

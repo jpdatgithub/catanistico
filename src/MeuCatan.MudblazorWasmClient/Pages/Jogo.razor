@@ -2,7 +2,8 @@
 @implements IAsyncDisposable
 
 @inject ClienteAuthService AuthService
-@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject Microsoft.AspNetCore.Components.WebAssembly.Hosting.IWebAssemblyHostEnvironment HostEnvironment
 @using MeuCatan.MudblazorWasmClient.Components.Catan
 @using System.Text.Json
 
@@ -68,33 +69,53 @@
                             colocação inicial entram no próximo passo.
                         </MudText>
 
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            Quando o setup estiver no seu turno, clique no destaque verde para executar sua ação: vértice para
+                            aldeia e aresta para estrada.
+                        </MudText>
+
                         @if (_session.CatanState is not null)
                         {
-                            <CatanBoardSvg State="_session.CatanState" DisplayWidth="900" DisplayHeight="600" />
+                            <CatanBoardSvg State="_session.CatanState" DisplayWidth="900" DisplayHeight="600"
+                                           OnVertexClicked="ExecutarPosicionamentoInicialAsync"
+                                           OnEdgeClicked="ExecutarPosicionamentoEstradaInicialAsync" />
                         }
                     </MudPaper>
                 </MudItem>
 
                 <MudItem xs="12" md="3">
                     <MudStack Spacing="2">
-                        <MudPaper Class="pa-4">
-                            <MudText Typo="Typo.h6">Debug do state (backend)</MudText>
-                            <MudExpansionPanels>
-                                <MudExpansionPanel Text="GameSessionResponse (completo)">
-                                    <MudText Typo="Typo.caption" Class="text-wrap" Style="white-space: pre-wrap; font-family: Consolas, monospace;">@SessionDebugJson</MudText>
-                                </MudExpansionPanel>
+                        <GameChatPanel SalaId="@SalaId" />
 
-                                @if (_session.CatanState is not null)
-                                {
-                                    <MudExpansionPanel Text="CatanState">
-                                        <MudText Typo="Typo.caption" Class="text-wrap" Style="white-space: pre-wrap; font-family: Consolas, monospace;">@CatanStateDebugJson</MudText>
+                        @if (DebugStatePanelEnabled)
+                        {
+                            <MudPaper Class="pa-4">
+                                <MudText Typo="Typo.h6">Debug do state (backend)</MudText>
+                                <MudExpansionPanels>
+                                    <MudExpansionPanel Text="GameSessionResponse (completo)">
+                                        <MudText Typo="Typo.caption" Class="text-wrap"
+                                                 Style="white-space: pre-wrap; font-family: Consolas, monospace;">@SessionDebugJson
+                                        </MudText>
                                     </MudExpansionPanel>
-                                }
-                            </MudExpansionPanels>
-                        </MudPaper>
+
+                                    @if (_session.CatanState is not null)
+                                    {
+                                        <MudExpansionPanel Text="CatanState">
+                                            <MudText Typo="Typo.caption" Class="text-wrap"
+                                                     Style="white-space: pre-wrap; font-family: Consolas, monospace;">@CatanStateDebugJson
+                                            </MudText>
+                                        </MudExpansionPanel>
+                                    }
+                                </MudExpansionPanels>
+                            </MudPaper>
+                        }
 
                         <MudPaper Class="pa-4">
                             <MudText Typo="Typo.h6">Setup inicial</MudText>
+                            @if (!string.IsNullOrWhiteSpace(_acaoErro))
+                            {
+                                <MudAlert Severity="Severity.Warning" Class="mb-2">@_acaoErro</MudAlert>
+                            }
                             @if (_session.CatanState is not null)
                             {
                                 <MudText Typo="Typo.body2">Etapa atual: @_session.CatanState.SetupStepIndex</MudText>
@@ -102,34 +123,38 @@
                                 </MudText>
                                 <MudText Typo="Typo.body2">Última aldeia:
                                     @(_session.CatanState.LastPlacedSettlementVertexId?.ToString() ?? "nenhuma")</MudText>
-                                    <MudText Typo="Typo.body2">Ladrão no tile: @(_session.CatanState.RobberTileId?.ToString() ?? "n/d")
-                                    </MudText>
-                                }
-                            </MudPaper>
+                                    <MudText Typo="Typo.body2">Aguardando estrada inicial:
+                                        @(_session.CatanState.AwaitingInitialRoadPlacement ? "sim" : "não")</MudText>
+                                        <MudText Typo="Typo.body2">Vértice base da estrada:
+                                            @(_session.CatanState.PendingInitialRoadFromVertexId?.ToString() ?? "n/a")</MudText>
+                                            <MudText Typo="Typo.body2">Ladrão no tile: @(_session.CatanState.RobberTileId?.ToString() ?? "n/d")
+                                            </MudText>
+                                        }
+                                    </MudPaper>
 
-                            <MudPaper Class="pa-4">
-                                <MudText Typo="Typo.h6">Próximas ações</MudText>
-                                @if (_session.AvailableActions.Count == 0)
-                                {
-                                    <MudText Typo="Typo.body2">Nenhuma ação disponível para você neste momento.</MudText>
-                                }
-                                else
-                                {
-                                    @foreach (var action in _session.AvailableActions)
-                                    {
-                                        <MudChip T="string" Class="mr-1 mb-1" Color="Color.Info" Value="@action">@action</MudChip>
-                                    }
-                                }
-                            </MudPaper>
+                                    <MudPaper Class="pa-4">
+                                        <MudText Typo="Typo.h6">Próximas ações</MudText>
+                                        @if (_session.AvailableActions.Count == 0)
+                                        {
+                                            <MudText Typo="Typo.body2">Nenhuma ação disponível para você neste momento.</MudText>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var action in _session.AvailableActions)
+                                            {
+                                                <MudChip T="string" Class="mr-1 mb-1" Color="Color.Info" Value="@action">@action</MudChip>
+                                            }
+                                        }
+                                    </MudPaper>
 
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="@($"/sala/{SalaId}")">
-                                Voltar para a sala
-                            </MudButton>
-                        </MudStack>
-                    </MudItem>
-                </MudGrid>
-            }
-        </MudContainer>
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="@($"/sala/{SalaId}")">
+                                        Voltar para a sala
+                                    </MudButton>
+                                </MudStack>
+                            </MudItem>
+                        </MudGrid>
+                    }
+                </MudContainer>
 
 @code {
     [Parameter]
@@ -137,20 +162,36 @@
 
     private GameSessionResponse? _session;
     private string? _erro;
+    private string? _acaoErro;
     private bool _carregando;
     private CancellationTokenSource? _pollingCancellation;
     private Task? _pollingTask;
+    private HubConnection? _stateHubConnection;
+    private DateTime _pollingRapidoAteUtc;
+    private string _sessionDebugJson = "null";
+    private string _catanStateDebugJson = "null";
+    // Keep heavy state serialization opt-in even in development builds.
+    private const bool EnableDebugStatePanelInDevelopment = false;
+    private const int PollingNormalMs = 2000;
+    private const int PollingRapidoMs = 600;
+    private static readonly TimeSpan JanelaPollingRapido = TimeSpan.FromSeconds(6);
     private static readonly JsonSerializerOptions _jsonDebugOptions = new()
     {
         WriteIndented = true
     };
 
-    private string SessionDebugJson => SerializarDebug(_session);
-    private string CatanStateDebugJson => SerializarDebug(_session?.CatanState);
+    private bool DebugStatePanelEnabled => string.Equals(HostEnvironment.Environment, "Development",
+StringComparison.OrdinalIgnoreCase)
+        && EnableDebugStatePanelInDevelopment;
+    private string SessionDebugJson => _sessionDebugJson;
+    private string CatanStateDebugJson => _catanStateDebugJson;
 
     protected override async Task OnInitializedAsync()
     {
+        HabilitarPollingRapidoTemporario();
         await AtualizarSessaoAsync();
+
+        await InicializarAtualizacaoTempoRealAsync();
 
         _pollingCancellation = new CancellationTokenSource();
         _pollingTask = IniciarPollingAsync(_pollingCancellation.Token);
@@ -171,27 +212,138 @@
             return;
         }
 
-        _session = result.Data;
+        AtualizarSessionState(result.Data);
+        HabilitarPollingRapidoTemporario();
+    }
+
+    private async Task ExecutarPosicionamentoInicialAsync(int vertexId)
+    {
+        if (_session is null || _carregando)
+        {
+            return;
+        }
+
+        _acaoErro = null;
+        _carregando = true;
+
+        var result = await AuthService.ExecutarAcaoJogoAsync(SalaId, new GameActionRequest
+        {
+            ActionType = GameActionTypes.PlaceInitialSettlement,
+            VertexId = vertexId
+        });
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _acaoErro = result.ErrorMessage ?? "Não foi possível posicionar a aldeia.";
+            return;
+        }
+
+        AtualizarSessionState(result.Data);
+        HabilitarPollingRapidoTemporario();
+    }
+
+    private async Task ExecutarPosicionamentoEstradaInicialAsync(EdgeKey edge)
+    {
+        if (_session is null || _carregando)
+        {
+            return;
+        }
+
+        _acaoErro = null;
+        _carregando = true;
+
+        var result = await AuthService.ExecutarAcaoJogoAsync(SalaId, new GameActionRequest
+        {
+            ActionType = GameActionTypes.PlaceInitialRoad,
+            SmallerVertexId = edge.smallerVertexId,
+            BiggerVertexId = edge.biggerVertexId
+        });
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _acaoErro = result.ErrorMessage ?? "Não foi possível posicionar a estrada inicial.";
+            return;
+        }
+
+        AtualizarSessionState(result.Data);
     }
 
     private async Task IniciarPollingAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
-
         try
         {
-            while (await timer.WaitForNextTickAsync(cancellationToken))
+            while (!cancellationToken.IsCancellationRequested)
             {
+                var intervalo = DateTime.UtcNow < _pollingRapidoAteUtc
+                    ? PollingRapidoMs
+                    : PollingNormalMs;
+
+                await Task.Delay(intervalo, cancellationToken);
+
                 var result = await AuthService.ObterSessaoJogoAsync(SalaId);
                 if (result.Success && result.Data is not null)
                 {
-                    _session = result.Data;
+                    AtualizarSessionState(result.Data);
                     await InvokeAsync(StateHasChanged);
                 }
             }
         }
         catch (OperationCanceledException)
         {
+        }
+    }
+
+    private async Task InicializarAtualizacaoTempoRealAsync()
+    {
+        var token = await AuthService.EnsureSessionAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return;
+        }
+
+        var hubUri = new Uri(Http.BaseAddress!, "hubs/game-chat");
+
+        _stateHubConnection = new HubConnectionBuilder()
+            .WithUrl(hubUri, options =>
+            {
+                options.AccessTokenProvider = AuthService.EnsureSessionAsync;
+            })
+            .WithAutomaticReconnect()
+            .Build();
+
+        _stateHubConnection.On<int, string, DateTime>("ReceiveGameStateInvalidation", (salaId, _, _) =>
+        {
+            if (salaId != SalaId)
+            {
+                return Task.CompletedTask;
+            }
+
+            HabilitarPollingRapidoTemporario();
+            return InvokeAsync(AtualizarSessaoEmSegundoPlanoAsync);
+        });
+
+        try
+        {
+            await _stateHubConnection.StartAsync();
+            await _stateHubConnection.InvokeAsync("JoinGameRoom", SalaId);
+        }
+        catch
+        {
+            // Polling remains as fallback when SignalR is unavailable.
+        }
+    }
+
+    private async Task AtualizarSessaoEmSegundoPlanoAsync()
+    {
+        var result = await AuthService.ObterSessaoJogoAsync(SalaId);
+        if (result.Success && result.Data is not null)
+        {
+            AtualizarSessionState(result.Data);
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -206,6 +358,11 @@
         if (_pollingTask is not null)
         {
             await _pollingTask;
+        }
+
+        if (_stateHubConnection is not null)
+        {
+            await _stateHubConnection.DisposeAsync();
         }
     }
 
@@ -228,5 +385,21 @@
         }
 
         return JsonSerializer.Serialize(payload, _jsonDebugOptions);
+    }
+
+    private void AtualizarSessionState(GameSessionResponse session)
+    {
+        _session = session;
+
+        if (DebugStatePanelEnabled)
+        {
+            _sessionDebugJson = SerializarDebug(session);
+            _catanStateDebugJson = SerializarDebug(session.CatanState);
+        }
+    }
+
+    private void HabilitarPollingRapidoTemporario()
+    {
+        _pollingRapidoAteUtc = DateTime.UtcNow.Add(JanelaPollingRapido);
     }
 }

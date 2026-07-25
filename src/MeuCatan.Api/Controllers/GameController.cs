@@ -48,4 +48,34 @@ public class GameController : ControllerBase
             _ => BadRequest(message)
         };
     }
+
+    [HttpPost("{salaId:int}/acao")]
+    public IActionResult ExecutarAcao([FromRoute] int salaId, [FromBody] GameActionRequest request)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var usuarioId))
+        {
+            return Unauthorized();
+        }
+
+        var result = _gameSessionService.ExecuteAction(salaId, usuarioId, request);
+        if (result.Success && result.Data is not null)
+        {
+            return Ok(result.Data);
+        }
+
+        var message = new
+        {
+            message = result.ErrorMessage ?? "Operação inválida."
+        };
+
+        return result.ErrorType switch
+        {
+            LobbyErrorType.Validation => BadRequest(message),
+            LobbyErrorType.Forbidden => StatusCode(StatusCodes.Status403Forbidden, message),
+            LobbyErrorType.NotFound => NotFound(message),
+            LobbyErrorType.Conflict => Conflict(message),
+            _ => BadRequest(message)
+        };
+    }
 }

@@ -10,6 +10,7 @@ namespace MeuCatan.MudblazorWasmClient.Services
         public const string TokenStorageKey = "cliente_auth_token";
 
         private readonly IJSRuntime _jsRuntime;
+        private string? _cachedToken;
 
         public ClienteAuthStateProvider(IJSRuntime jsRuntime)
         {
@@ -52,6 +53,8 @@ namespace MeuCatan.MudblazorWasmClient.Services
 
         public async Task MarkUserAsAuthenticatedAsync(string token)
         {
+            _cachedToken = token;
+
             try
             {
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", TokenStorageKey, token);
@@ -71,7 +74,12 @@ namespace MeuCatan.MudblazorWasmClient.Services
 
         public Task<string?> GetTokenAsync()
         {
-            return _jsRuntime.InvokeAsync<string?>("localStorage.getItem", TokenStorageKey).AsTask();
+            if (!string.IsNullOrWhiteSpace(_cachedToken))
+            {
+                return Task.FromResult<string?>(_cachedToken);
+            }
+
+            return GetTokenFromStorageAsync();
         }
 
         public async Task<bool> IsGuestAsync()
@@ -83,6 +91,8 @@ namespace MeuCatan.MudblazorWasmClient.Services
 
         private async Task ClearTokenAsync()
         {
+            _cachedToken = null;
+
             try
             {
                 await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", TokenStorageKey);
@@ -90,6 +100,13 @@ namespace MeuCatan.MudblazorWasmClient.Services
             catch
             {
             }
+        }
+
+        private async Task<string?> GetTokenFromStorageAsync()
+        {
+            var token = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", TokenStorageKey);
+            _cachedToken = token;
+            return token;
         }
     }
 }

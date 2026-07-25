@@ -155,6 +155,53 @@ namespace MeuCatan.Api.Controllers
             return Ok(cliente);
         }
 
+        [HttpPost("change-password")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordClientRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.NovaSenha) || string.IsNullOrWhiteSpace(request.ConfirmacaoNovaSenha))
+            {
+                return BadRequest(new { message = "A nova senha e a confirmação são obrigatórias." });
+            }
+
+            if (!string.Equals(request.NovaSenha, request.ConfirmacaoNovaSenha, StringComparison.Ordinal))
+            {
+                return BadRequest(new { message = "A confirmação da senha não confere." });
+            }
+
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized();
+            }
+
+            var cliente = await _context.ClientUsers.FirstOrDefaultAsync(c => c.Id == userId);
+            if (cliente is null)
+            {
+                return Unauthorized();
+            }
+
+            var isGuest = IsGuest(cliente.Email);
+            if (!isGuest)
+            {
+                if (string.IsNullOrWhiteSpace(request.SenhaAtual))
+                {
+                    return BadRequest(new { message = "A senha atual é obrigatória." });
+                }
+
+                var currentPasswordVerification = _passwordHasher.VerifyHashedPassword(cliente, cliente.SenhaHash, request.SenhaAtual);
+                if (currentPasswordVerification == PasswordVerificationResult.Failed)
+                {
+                    return BadRequest(new { message = "A senha atual está incorreta." });
+                }
+            }
+
+            cliente.SenhaHash = _passwordHasher.HashPassword(cliente, request.NovaSenha);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Senha atualizada com sucesso." });
+        }
+
         private string GerarToken(ClientUser cliente, bool isGuest = false)
         {
             var jwtKey = _configuration["Jwt:Key"]

@@ -13,20 +13,29 @@ public interface ILobbyRoomService
     LobbyOperationResult<LobbyDetalheSalaResponse> SelecionarJogo(int salaId, int usuarioId, LobbySelecionarJogoRequest request);
     LobbyOperationResult<LobbyDetalheSalaResponse> AlterarPronto(int salaId, int usuarioId, bool isReady);
     LobbyOperationResult<LobbyIniciarJogoResponse> IniciarJogo(int salaId, int usuarioId);
+    LobbyOperationResult<LobbyDetalheSalaResponse> UpdatePlayerPresence(int salaId, int usuarioId);
 }
 
 public sealed class LobbyRoomService : ILobbyRoomService
 {
+    private static readonly TimeSpan GuestInactivityGraceWindow = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan PresenceOnlineWindow = TimeSpan.FromSeconds(20);
+
     private readonly ILobbyGameCatalogService _gameCatalogService;
     private readonly IGameSessionService _gameSessionService;
-    private readonly Lock _lock = new();
-    private readonly Dictionary<int, SalaState> _salas = [];
-    private int _ultimoSalaId;
+    private readonly IGameStateEventPublisher _gameStateEventPublisher;
+    private readonly ILobbyRoomStore _roomStore;
 
-    public LobbyRoomService(ILobbyGameCatalogService gameCatalogService, IGameSessionService gameSessionService)
+    public LobbyRoomService(
+        ILobbyGameCatalogService gameCatalogService,
+        IGameSessionService gameSessionService,
+        IGameStateEventPublisher gameStateEventPublisher,
+        ILobbyRoomStore roomStore)
     {
         _gameCatalogService = gameCatalogService;
         _gameSessionService = gameSessionService;
+        _gameStateEventPublisher = gameStateEventPublisher;
+        _roomStore = roomStore;
     }
 
     public LobbyJogosDisponiveisResponse ListarJogosDisponiveis()
@@ -39,9 +48,9 @@ public sealed class LobbyRoomService : ILobbyRoomService
 
     public LobbyListarSalasResponse ListarSalas(int usuarioId)
     {
-        lock (_lock)
+        return _roomStore.Read(store =>
         {
-            var salas = _salas.Values
+            var salas = store.Rooms
                 .OrderByDescending(s => s.CriadaEmUtc)
                 .Select(s => new LobbySalaResumoResponse
                 {
@@ -64,7 +73,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
             {
                 Salas = salas
             };
-        }
+        });
     }
 
     public LobbyOperationResult<LobbyCriarSalaResponse> CriarSala(int usuarioId, string usuarioNome, bool isGuest, LobbyCriarSalaRequest request)
@@ -100,10 +109,10 @@ public sealed class LobbyRoomService : ILobbyRoomService
             ? NormalizarCodigoPrivado(request.CodigoPrivado)
             : null;
 
-        lock (_lock)
+        return _roomStore.Write(store =>
         {
-            var salaId = ++_ultimoSalaId;
-            var sala = new SalaState
+            var salaId = store.NextRoomId();
+            var sala = new LobbyRoomState
             {
                 SalaId = salaId,
                 Nome = request.Nome.Trim(),
@@ -119,16 +128,18 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 Fase = LobbyFaseSala.Lobby
             };
 
-            sala.Jogadores.Add(usuarioId, new JogadorState
+            sala.Jogadores.Add(usuarioId, new LobbyPlayerState
             {
                 UsuarioId = usuarioId,
                 Nome = usuarioNome,
                 IsGuest = isGuest,
                 IsReady = false,
-                EntrouEmUtc = DateTime.UtcNow
+                EntrouEmUtc = DateTime.UtcNow,
+                LastSeenUtc = DateTime.UtcNow
             });
 
-            _salas[salaId] = sala;
+            store.Save(sala);
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "room-created");
 
             return LobbyOperationResult<LobbyCriarSalaResponse>.Ok(new LobbyCriarSalaResponse
             {
@@ -140,33 +151,69 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 GameType = sala.GameType,
                 Fase = sala.Fase
             });
-        }
+        });
     }
 
     public LobbyOperationResult<LobbyDetalheSalaResponse> ObterSala(int salaId, int usuarioId)
     {
-        lock (_lock)
+        return _roomStore.Write(store =>
         {
-            if (!_salas.TryGetValue(salaId, out var sala))
+            var sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
             {
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
+            var hadCleanup = CleanupExpiredGuestsInRoom(store, sala);
+            if (hadCleanup)
+            {
+                sala = store.GetRoomOrDefault(salaId);
+                if (sala is null)
+                {
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                    return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+                }
+
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            }
+
+            if (sala.Jogadores.TryGetValue(usuarioId, out var jogador))
+            {
+                jogador.LastSeenUtc = DateTime.UtcNow;
+                store.Save(sala);
+            }
+
             return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
-        }
+        });
     }
 
     public LobbyOperationResult<LobbyDetalheSalaResponse> EntrarSala(int salaId, int usuarioId, string usuarioNome, bool isGuest, string? codigoPrivado)
     {
-        lock (_lock)
+        return _roomStore.Write(store =>
         {
-            if (!_salas.TryGetValue(salaId, out var sala))
+            var sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
             {
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
+            var hadCleanup = CleanupExpiredGuestsInRoom(store, sala);
+            if (hadCleanup)
+            {
+                sala = store.GetRoomOrDefault(salaId);
+                if (sala is null)
+                {
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                    return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+                }
+
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            }
+
             if (sala.Jogadores.ContainsKey(usuarioId))
             {
+                sala.Jogadores[usuarioId].LastSeenUtc = DateTime.UtcNow;
+                store.Save(sala);
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
             }
 
@@ -189,28 +236,45 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 }
             }
 
-            sala.Jogadores.Add(usuarioId, new JogadorState
+            sala.Jogadores.Add(usuarioId, new LobbyPlayerState
             {
                 UsuarioId = usuarioId,
                 Nome = usuarioNome,
                 IsGuest = isGuest,
                 IsReady = false,
-                EntrouEmUtc = DateTime.UtcNow
+                EntrouEmUtc = DateTime.UtcNow,
+                LastSeenUtc = DateTime.UtcNow
             });
 
             sala.Fase = LobbyFaseSala.Setup;
 
+            store.Save(sala);
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "player-joined");
+
             return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
-        }
+        });
     }
 
     public LobbyOperationResult<LobbySairSalaResponse> SairSala(int salaId, int usuarioId)
     {
-        lock (_lock)
+        return _roomStore.Write(store =>
         {
-            if (!_salas.TryGetValue(salaId, out var sala))
+            var sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
             {
                 return LobbyOperationResult<LobbySairSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (CleanupExpiredGuestsInRoom(store, sala))
+            {
+                sala = store.GetRoomOrDefault(salaId);
+                if (sala is null)
+                {
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                    return LobbyOperationResult<LobbySairSalaResponse>.NotFound("Sala não encontrada.");
+                }
+
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
             }
 
             if (!sala.Jogadores.Remove(usuarioId))
@@ -231,11 +295,18 @@ public sealed class LobbyRoomService : ILobbyRoomService
 
             if (sala.Jogadores.Count == 0)
             {
-                _salas.Remove(salaId);
+                store.Remove(salaId);
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
             }
             else if (sala.Fase == LobbyFaseSala.InGame)
             {
                 sala.Fase = LobbyFaseSala.Setup;
+                store.Save(sala);
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            }
+            else
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
             }
 
             return LobbyOperationResult<LobbySairSalaResponse>.Ok(new LobbySairSalaResponse
@@ -243,16 +314,29 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 Success = true,
                 Message = "Você saiu da sala."
             });
-        }
+        });
     }
 
     public LobbyOperationResult<LobbyDetalheSalaResponse> SelecionarJogo(int salaId, int usuarioId, LobbySelecionarJogoRequest request)
     {
-        lock (_lock)
+        return _roomStore.Write(store =>
         {
-            if (!_salas.TryGetValue(salaId, out var sala))
+            var sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
             {
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (CleanupExpiredGuestsInRoom(store, sala))
+            {
+                sala = store.GetRoomOrDefault(salaId);
+                if (sala is null)
+                {
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                    return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+                }
+
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
             }
 
             if (sala.CriadorId != usuarioId)
@@ -288,17 +372,33 @@ public sealed class LobbyRoomService : ILobbyRoomService
             sala.Fase = sala.Jogadores.Count > 1 ? LobbyFaseSala.Setup : LobbyFaseSala.Lobby;
             ResetarProntosNaoCriador(sala);
 
+            store.Save(sala);
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "game-selected");
+
             return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
-        }
+        });
     }
 
     public LobbyOperationResult<LobbyDetalheSalaResponse> AlterarPronto(int salaId, int usuarioId, bool isReady)
     {
-        lock (_lock)
+        return _roomStore.Write(store =>
         {
-            if (!_salas.TryGetValue(salaId, out var sala))
+            var sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
             {
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (CleanupExpiredGuestsInRoom(store, sala))
+            {
+                sala = store.GetRoomOrDefault(salaId);
+                if (sala is null)
+                {
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                    return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+                }
+
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
             }
 
             if (!sala.Jogadores.TryGetValue(usuarioId, out var jogador))
@@ -317,19 +417,35 @@ public sealed class LobbyRoomService : ILobbyRoomService
             }
 
             jogador.IsReady = isReady;
+            jogador.LastSeenUtc = DateTime.UtcNow;
             sala.Fase = LobbyFaseSala.Setup;
+            store.Save(sala);
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "ready-changed");
 
             return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
-        }
+        });
     }
 
     public LobbyOperationResult<LobbyIniciarJogoResponse> IniciarJogo(int salaId, int usuarioId)
     {
-        lock (_lock)
+        return _roomStore.Write(store =>
         {
-            if (!_salas.TryGetValue(salaId, out var sala))
+            var sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
             {
                 return LobbyOperationResult<LobbyIniciarJogoResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (CleanupExpiredGuestsInRoom(store, sala))
+            {
+                sala = store.GetRoomOrDefault(salaId);
+                if (sala is null)
+                {
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                    return LobbyOperationResult<LobbyIniciarJogoResponse>.NotFound("Sala não encontrada.");
+                }
+
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
             }
 
             if (sala.CriadorId != usuarioId)
@@ -374,6 +490,8 @@ public sealed class LobbyRoomService : ILobbyRoomService
             }
 
             sala.Fase = LobbyFaseSala.InGame;
+            store.Save(sala);
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "game-started");
 
             return LobbyOperationResult<LobbyIniciarJogoResponse>.Ok(new LobbyIniciarJogoResponse
             {
@@ -381,12 +499,47 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 Fase = sala.Fase,
                 RedirectPath = $"/jogo/{sala.SalaId}"
             });
-        }
+        });
     }
 
-    private static LobbyDetalheSalaResponse ToDetalheResponse(SalaState sala, int usuarioId)
+    public LobbyOperationResult<LobbyDetalheSalaResponse> UpdatePlayerPresence(int salaId, int usuarioId)
+    {
+        return _roomStore.Write(store =>
+        {
+            var sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
+            {
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (CleanupExpiredGuestsInRoom(store, sala))
+            {
+                sala = store.GetRoomOrDefault(salaId);
+                if (sala is null)
+                {
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                    return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+                }
+
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            }
+
+            if (!sala.Jogadores.TryGetValue(usuarioId, out var jogador))
+            {
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.Forbidden("Você não participa desta sala.");
+            }
+
+            jogador.LastSeenUtc = DateTime.UtcNow;
+            store.Save(sala);
+
+            return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
+        });
+    }
+
+    private static LobbyDetalheSalaResponse ToDetalheResponse(LobbyRoomState sala, int usuarioId)
     {
         var currentUser = sala.Jogadores.GetValueOrDefault(usuarioId);
+        var currentUserIsInRoom = currentUser is not null;
         var currentUserIsCreator = sala.CriadorId == usuarioId;
         var allPlayersReady = TodosNaoCriadoresProntos(sala);
 
@@ -403,10 +556,12 @@ public sealed class LobbyRoomService : ILobbyRoomService
             GameType = sala.GameType,
             GameDisplayName = sala.GameDisplayName,
             Fase = sala.Fase,
+            CurrentUserIsInRoom = currentUserIsInRoom,
             CurrentUserIsCreator = currentUserIsCreator,
             CurrentUserIsReady = currentUser?.IsReady ?? false,
-            CanCurrentUserSelectGame = currentUserIsCreator && sala.Fase is LobbyFaseSala.Lobby or LobbyFaseSala.Setup,
-            CanCurrentUserStart = currentUserIsCreator
+            CanCurrentUserSelectGame = currentUserIsInRoom && currentUserIsCreator && sala.Fase is LobbyFaseSala.Lobby or LobbyFaseSala.Setup,
+            CanCurrentUserStart = currentUserIsInRoom
+                && currentUserIsCreator
                 && sala.Fase is LobbyFaseSala.Lobby or LobbyFaseSala.Setup
                 && allPlayersReady
                 && sala.Jogadores.Count >= sala.MinJogadores,
@@ -420,10 +575,56 @@ public sealed class LobbyRoomService : ILobbyRoomService
                     Nome = j.Nome,
                     IsGuest = j.IsGuest,
                     IsCreator = j.UsuarioId == sala.CriadorId,
-                    IsReady = j.IsReady
+                    IsReady = j.IsReady,
+                    LastSeenUtc = j.LastSeenUtc,
+                    IsOnline = DateTime.UtcNow - j.LastSeenUtc <= PresenceOnlineWindow
                 })
                 .ToList()
         };
+    }
+
+    private static bool CleanupExpiredGuestsInRoom(LobbyRoomStoreWriteContext store, LobbyRoomState sala)
+    {
+        if (sala.Fase == LobbyFaseSala.InGame)
+        {
+            return false;
+        }
+
+        var cutoffUtc = DateTime.UtcNow - GuestInactivityGraceWindow;
+        var staleGuestIds = sala.Jogadores.Values
+            .Where(j => j.IsGuest && j.LastSeenUtc < cutoffUtc)
+            .Select(j => j.UsuarioId)
+            .ToList();
+
+        if (staleGuestIds.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var guestId in staleGuestIds)
+        {
+            sala.Jogadores.Remove(guestId);
+
+            if (sala.Jogadores.Count > 0 && sala.CriadorId == guestId)
+            {
+                var novoCriador = sala.Jogadores.Values
+                    .OrderBy(j => j.EntrouEmUtc)
+                    .First();
+
+                sala.CriadorId = novoCriador.UsuarioId;
+                sala.CriadorNome = novoCriador.Nome;
+                novoCriador.IsReady = false;
+            }
+        }
+
+        if (sala.Jogadores.Count == 0)
+        {
+            store.Remove(sala.SalaId);
+            return true;
+        }
+
+        store.Save(sala);
+        return true;
     }
 
     private LobbyOperationResult<LobbyJogoDisponivelResponse> ObterJogoOuErro(string? gameType)
@@ -437,14 +638,14 @@ public sealed class LobbyRoomService : ILobbyRoomService
         return LobbyOperationResult<LobbyJogoDisponivelResponse>.Ok(jogo);
     }
 
-    private static bool TodosNaoCriadoresProntos(SalaState sala)
+    private static bool TodosNaoCriadoresProntos(LobbyRoomState sala)
     {
         return sala.Jogadores.Values
             .Where(j => j.UsuarioId != sala.CriadorId)
             .All(j => j.IsReady);
     }
 
-    private static void ResetarProntosNaoCriador(SalaState sala)
+    private static void ResetarProntosNaoCriador(LobbyRoomState sala)
     {
         foreach (var jogador in sala.Jogadores.Values)
         {
@@ -475,32 +676,6 @@ public sealed class LobbyRoomService : ILobbyRoomService
         return new string(Enumerable.Range(0, 6)
             .Select(_ => chars[Random.Shared.Next(chars.Length)])
             .ToArray());
-    }
-
-    private sealed class SalaState
-    {
-        public int SalaId { get; set; }
-        public string Nome { get; set; } = string.Empty;
-        public string Tipo { get; set; } = LobbyTipoSala.Publica;
-        public string? CodigoPrivado { get; set; }
-        public int CriadorId { get; set; }
-        public string CriadorNome { get; set; } = string.Empty;
-        public int CapacidadeMaxima { get; set; }
-        public string GameType { get; set; } = LobbyTipoJogo.CatanBase;
-        public string GameDisplayName { get; set; } = string.Empty;
-        public int MinJogadores { get; set; }
-        public LobbyFaseSala Fase { get; set; } = LobbyFaseSala.Lobby;
-        public DateTime CriadaEmUtc { get; set; }
-        public Dictionary<int, JogadorState> Jogadores { get; } = [];
-    }
-
-    private sealed class JogadorState
-    {
-        public int UsuarioId { get; set; }
-        public string Nome { get; set; } = string.Empty;
-        public bool IsGuest { get; set; }
-        public bool IsReady { get; set; }
-        public DateTime EntrouEmUtc { get; set; }
     }
 }
 

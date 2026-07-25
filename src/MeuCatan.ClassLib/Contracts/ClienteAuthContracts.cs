@@ -33,3 +33,10 @@ public class ClientProfileResponse
     public string Email { get; set; } = string.Empty;
     public bool IsGuest { get; set; }
 }
+
+public class ChangePasswordClientRequest
+{
+    public string? SenhaAtual { get; set; }
+    public string NovaSenha { get; set; } = string.Empty;
+    public string ConfirmacaoNovaSenha { get; set; } = string.Empty;
+}

@@ -1,0 +1,1 @@
+dotnet watch --project src/MeuCatan.Api/MeuCatan.Api.csproj

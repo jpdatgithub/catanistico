@@ -1,0 +1,150 @@
+@page "/profile"
+
+@inject ClienteAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Profile</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-6 mb-8">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h4">Profile</MudText>
+            <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="LogoutAsync" Disabled="_isLoading">
+                Logout
+            </MudButton>
+        </MudStack>
+
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
+        }
+
+        @if (_isLoading)
+        {
+            <MudPaper Class="pa-6 d-flex justify-center">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            </MudPaper>
+        }
+        else if (_profile is not null)
+        {
+            <MudPaper Class="pa-6">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.h6">Informações da conta</MudText>
+                    <MudText Typo="Typo.body1"><strong>Email:</strong> @_profile.Email</MudText>
+                    <MudText Typo="Typo.body1"><strong>Tipo:</strong> @(_profile.IsGuest ? "Convidado" : "Registrado")</MudText>
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Class="pa-6">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.h6">Trocar senha</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        @(_profile.IsGuest
+                            ? "Convidados podem definir uma senha nova diretamente para a conta atual."
+                            : "Informe sua senha atual para criar uma nova senha.")
+                    </MudText>
+
+                    <MudForm @ref="_passwordForm" @key="_passwordFormKey" Model="_passwordModel" @bind-IsValid="_passwordFormIsValid">
+                        @if (!_profile.IsGuest)
+                        {
+                            <MudTextField @bind-Value="_passwordModel.SenhaAtual" Label="Senha atual" Variant="Variant.Outlined"
+                                          InputType="InputType.Password" Immediate="true" Required="true" />
+                        }
+
+                        <MudTextField @bind-Value="_passwordModel.NovaSenha" Label="Nova senha" Variant="Variant.Outlined"
+                                      InputType="InputType.Password" Immediate="true" Required="true" Class="mt-3" />
+                        <MudTextField @bind-Value="_passwordModel.ConfirmacaoNovaSenha" Label="Confirmar nova senha"
+                                      Variant="Variant.Outlined" InputType="InputType.Password" Immediate="true"
+                                      Required="true" Validation="@((Func<string?, string?>)ValidarConfirmacaoSenha)"
+                                      Class="mt-3" />
+
+                        @if (!string.IsNullOrWhiteSpace(_passwordError))
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@_passwordError</MudAlert>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(_passwordSuccessMessage))
+                        {
+                            <MudAlert Severity="Severity.Success" Dense="true" Class="mt-3">@_passwordSuccessMessage</MudAlert>
+                        }
+
+                        <MudStack Row="true" Spacing="2" Class="mt-4">
+                            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="ChangePasswordAsync"
+                                       Disabled="@(_savingPassword || !_passwordFormIsValid)">
+                                @(_savingPassword ? "Salvando..." : "Salvar nova senha")
+                            </MudButton>
+                        </MudStack>
+                    </MudForm>
+                </MudStack>
+            </MudPaper>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private MudForm _passwordForm = null!;
+    private bool _passwordFormIsValid;
+    private bool _isLoading = true;
+    private bool _savingPassword;
+    private string? _errorMessage;
+    private string? _passwordError;
+    private string? _passwordSuccessMessage;
+    private ClientProfileResponse? _profile;
+    private ChangePasswordClientRequest _passwordModel = new();
+    private int _passwordFormKey;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _profile = await AuthService.GetProfileAsync();
+        if (_profile is null)
+        {
+            _errorMessage = "Não foi possível carregar seu perfil.";
+        }
+
+        _isLoading = false;
+    }
+
+    private string? ValidarConfirmacaoSenha(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(_passwordModel.NovaSenha) || string.IsNullOrWhiteSpace(valor))
+        {
+            return "A confirmação da senha é obrigatória.";
+        }
+
+        return string.Equals(valor, _passwordModel.NovaSenha, StringComparison.Ordinal)
+            ? null
+            : "A confirmação da senha não confere.";
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        await _passwordForm.ValidateAsync();
+        if (!_passwordForm.IsValid)
+        {
+            return;
+        }
+
+        _passwordError = null;
+        _passwordSuccessMessage = null;
+        _savingPassword = true;
+
+        var result = await AuthService.ChangePasswordAsync(_passwordModel);
+        _savingPassword = false;
+
+        if (!result.Success)
+        {
+            _passwordError = result.ErrorMessage;
+            return;
+        }
+
+        _passwordSuccessMessage = "Senha atualizada com sucesso.";
+        _passwordModel = new ChangePasswordClientRequest();
+        _passwordFormKey++;
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login", replace: true);
+    }
+}

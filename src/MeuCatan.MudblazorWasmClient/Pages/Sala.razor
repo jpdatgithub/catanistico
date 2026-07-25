@@ -64,6 +64,14 @@
                                                 {
                                                     <MudChip Size="Size.Small" Color="Color.Primary">Criador</MudChip>
                                                 }
+                                                @if (jogador.IsOnline)
+                                                {
+                                                    <MudChip Size="Size.Small" Color="Color.Success">Online</MudChip>
+                                                }
+                                                else
+                                                {
+                                                    <MudChip Size="Size.Small" Color="Color.Default">Offline</MudChip>
+                                                }
                                             </MudStack>
                                             @if (jogador.IsCreator)
                                             {
@@ -161,8 +169,10 @@
     private string? _mensagem;
     private bool _carregando;
     private bool _acaoEmAndamento;
+    private bool _tentouEntradaAutomatica;
     private CancellationTokenSource? _pollingCancellation;
     private Task? _pollingTask;
+    private DateTime _ultimoHeartbeatUtc = DateTime.MinValue;
 
     protected override async Task OnInitializedAsync()
     {
@@ -195,6 +205,33 @@
         {
             _erro = result.ErrorMessage;
             return;
+        }
+
+        if (!result.Data.CurrentUserIsInRoom)
+        {
+            if (result.Data.Tipo == LobbyTipoSala.Privada)
+            {
+                _erro = "Você precisa entrar na sala pelo lobby usando o código privado.";
+                _sala = result.Data;
+                return;
+            }
+
+            if (!_tentouEntradaAutomatica)
+            {
+                _tentouEntradaAutomatica = true;
+
+                var entryResult = await AuthService.EntrarSalaAsync(SalaId, null);
+                if (!entryResult.Success || entryResult.Data is null)
+                {
+                    _erro = entryResult.ErrorMessage;
+                    _sala = result.Data;
+                    return;
+                }
+
+                _sala = entryResult.Data;
+                _mensagem = "Você entrou na sala.";
+                return;
+            }
         }
 
         _sala = result.Data;
@@ -285,11 +322,24 @@
     private async Task IniciarPollingAsync(CancellationToken cancellationToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        var heartbeatInterval = TimeSpan.FromSeconds(12);
 
         try
         {
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
+                if (DateTime.UtcNow - _ultimoHeartbeatUtc >= heartbeatInterval)
+                {
+                    var heartbeatResult = await AuthService.EnviarHeartbeatSalaAsync(SalaId);
+                    if (heartbeatResult.Success && heartbeatResult.Data is not null)
+                    {
+                        _sala = heartbeatResult.Data;
+                        _ultimoHeartbeatUtc = DateTime.UtcNow;
+                        await InvokeAsync(StateHasChanged);
+                        continue;
+                    }
+                }
+
                 var result = await AuthService.ObterSalaAsync(SalaId);
                 if (result.Success && result.Data is not null)
                 {

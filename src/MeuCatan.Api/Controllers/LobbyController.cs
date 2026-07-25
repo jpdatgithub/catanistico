@@ -135,6 +135,19 @@ public class LobbyController : ControllerBase
         return ToActionResult(result);
     }
 
+    [HttpPost("salas/{salaId:int}/heartbeat")]
+    public IActionResult Heartbeat([FromRoute] int salaId)
+    {
+        var userContext = GetUserContext();
+        if (userContext is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = _lobbyRoomService.UpdatePlayerPresence(salaId, userContext.UsuarioId);
+        return ToActionResult(result);
+    }
+
     private IActionResult ToActionResult<T>(LobbyOperationResult<T> result)
     {
         if (result.Success && result.Data is not null)

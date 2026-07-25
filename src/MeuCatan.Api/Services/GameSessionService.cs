@@ -8,6 +8,7 @@ public interface IGameSessionService
 {
     LobbyOperationResult<GameSessionResponse> CreateGameSessionFromRoom(RoomGameStartContext roomContext);
     LobbyOperationResult<GameSessionResponse> GetSession(int salaId, int usuarioId);
+    LobbyOperationResult<GameSessionResponse> ExecuteAction(int salaId, int usuarioId, GameActionRequest request);
 }
 
 public sealed class CatanGameSessionService : IGameSessionService
@@ -28,8 +29,14 @@ public sealed class CatanGameSessionService : IGameSessionService
         5, 2, 6, 3, 8, 10, 9, 12, 11, 4, 8, 10, 9, 4, 5, 6, 3, 11
     ];
 
-    private readonly Lock _lock = new();
-    private readonly Dictionary<int, CatanGameSessionState> _sessions = [];
+    private readonly IGameSessionStore _sessionStore;
+    private readonly IGameStateEventPublisher _gameStateEventPublisher;
+
+    public CatanGameSessionService(IGameSessionStore sessionStore, IGameStateEventPublisher gameStateEventPublisher)
+    {
+        _sessionStore = sessionStore;
+        _gameStateEventPublisher = gameStateEventPublisher;
+    }
 
     public LobbyOperationResult<GameSessionResponse> CreateGameSessionFromRoom(RoomGameStartContext roomContext)
     {
@@ -38,9 +45,10 @@ public sealed class CatanGameSessionService : IGameSessionService
             return LobbyOperationResult<GameSessionResponse>.Validation("Tipo de jogo ainda não suportado para criação de sessão.");
         }
 
-        lock (_lock)
+        return _sessionStore.Write(store =>
         {
-            if (_sessions.TryGetValue(roomContext.SalaId, out var existingSession))
+            var existingSession = store.GetSessionOrDefault(roomContext.SalaId);
+            if (existingSession is not null)
             {
                 return LobbyOperationResult<GameSessionResponse>.Ok(ToResponse(existingSession, roomContext.CriadorId));
             }
@@ -73,17 +81,19 @@ public sealed class CatanGameSessionService : IGameSessionService
             };
 
             session.CurrentPlayerId = session.SetupTurnOrder.First();
-            _sessions[roomContext.SalaId] = session;
+            store.Save(session);
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(session.SalaId, "session-created");
 
             return LobbyOperationResult<GameSessionResponse>.Ok(ToResponse(session, roomContext.CriadorId));
-        }
+        });
     }
 
     public LobbyOperationResult<GameSessionResponse> GetSession(int salaId, int usuarioId)
     {
-        lock (_lock)
+        return _sessionStore.Read(store =>
         {
-            if (!_sessions.TryGetValue(salaId, out var session))
+            var session = store.GetSessionOrDefault(salaId);
+            if (session is null)
             {
                 return LobbyOperationResult<GameSessionResponse>.NotFound("Sessão de jogo não encontrada.");
             }
@@ -94,16 +104,194 @@ public sealed class CatanGameSessionService : IGameSessionService
             }
 
             return LobbyOperationResult<GameSessionResponse>.Ok(ToResponse(session, usuarioId));
+        });
+    }
+
+    public LobbyOperationResult<GameSessionResponse> ExecuteAction(int salaId, int usuarioId, GameActionRequest request)
+    {
+        if (request is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Ação inválida.");
         }
+
+        return _sessionStore.Write(store =>
+        {
+            var session = store.GetSessionOrDefault(salaId);
+            if (session is null)
+            {
+                return LobbyOperationResult<GameSessionResponse>.NotFound("Sessão de jogo não encontrada.");
+            }
+
+            var actingPlayer = session.Players.FirstOrDefault(player => player.UsuarioId == usuarioId);
+            if (actingPlayer is null)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não participa desta sessão.");
+            }
+
+            if (session.Phase != GameTipoFase.SetupInicial)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("A fase atual não permite posicionamento inicial.");
+            }
+
+            if (session.CurrentPlayerId != usuarioId)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não pode agir agora.");
+            }
+
+            if (string.Equals(request.ActionType, GameActionTypes.PlaceInitialSettlement, StringComparison.OrdinalIgnoreCase))
+            {
+                var placeSettlementResult = TryPlaceInitialSettlement(session, actingPlayer, usuarioId, request.VertexId);
+                if (placeSettlementResult is not null)
+                {
+                    return placeSettlementResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.PlaceInitialRoad, StringComparison.OrdinalIgnoreCase))
+            {
+                var placeRoadResult = TryPlaceInitialRoad(session, actingPlayer, usuarioId, request.SmallerVertexId, request.BiggerVertexId);
+                if (placeRoadResult is not null)
+                {
+                    return placeRoadResult;
+                }
+            }
+            else
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("Tipo de ação não suportado.");
+            }
+
+            store.Save(session);
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(session.SalaId, "action-executed");
+
+            return LobbyOperationResult<GameSessionResponse>.Ok(ToResponse(session, usuarioId));
+        });
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryPlaceInitialSettlement(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        int usuarioId,
+        int? vertexId)
+    {
+        if (session.AwaitingInitialRoadPlacement)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você precisa posicionar a estrada inicial antes de colocar outra aldeia.");
+        }
+
+        if (vertexId is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Informe um vértice para posicionar a aldeia.");
+        }
+
+        var vertex = session.Board.Vertices.FirstOrDefault(item => item.VertexId == vertexId.Value);
+        if (vertex is null || vertex.VertexId == 0)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Vértice inválido.");
+        }
+
+        if (vertex.OwnerPlayerId is not null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Esse vértice já possui construção.");
+        }
+
+        if (HasAdjacentSettlement(session, vertex.VertexId))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Não é possível posicionar uma aldeia ao lado de outra já construída.");
+        }
+
+        vertex.OwnerPlayerId = usuarioId;
+        vertex.BuildingType = "aldeia";
+        actingPlayer.Pontos += 1;
+        actingPlayer.RemainingSettlements = Math.Max(0, actingPlayer.RemainingSettlements - 1);
+
+        session.LastPlacedSettlementVertexId = vertex.VertexId;
+        session.AwaitingInitialRoadPlacement = true;
+        session.PendingInitialRoadFromVertexId = vertex.VertexId;
+
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryPlaceInitialRoad(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        int usuarioId,
+        int? smallerVertexId,
+        int? biggerVertexId)
+    {
+        if (!session.AwaitingInitialRoadPlacement || session.PendingInitialRoadFromVertexId is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você precisa posicionar uma aldeia antes da estrada inicial.");
+        }
+
+        if (smallerVertexId is null || biggerVertexId is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Informe os vértices da aresta para posicionar a estrada.");
+        }
+
+        var edgeKey = new EdgeKey(smallerVertexId.Value, biggerVertexId.Value);
+        var edge = session.Board.Edges.FirstOrDefault(item =>
+            item.EdgeKey.smallerVertexId == edgeKey.smallerVertexId &&
+            item.EdgeKey.biggerVertexId == edgeKey.biggerVertexId);
+
+        if (edge is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Aresta inválida.");
+        }
+
+        if (edge.OwnerPlayerId is not null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Essa aresta já possui estrada.");
+        }
+
+        var settlementVertexId = session.PendingInitialRoadFromVertexId.Value;
+        var isAdjacentToPlacedSettlement = edge.EdgeKey.smallerVertexId == settlementVertexId || edge.EdgeKey.biggerVertexId == settlementVertexId;
+        if (!isAdjacentToPlacedSettlement)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("A estrada inicial deve ser adjacente à aldeia recém posicionada.");
+        }
+
+        edge.OwnerPlayerId = usuarioId;
+        actingPlayer.RemainingRoads = Math.Max(0, actingPlayer.RemainingRoads - 1);
+
+        session.AwaitingInitialRoadPlacement = false;
+        session.PendingInitialRoadFromVertexId = null;
+        session.SetupStepIndex += 1;
+
+        if (session.SetupStepIndex >= session.SetupTurnOrder.Count)
+        {
+            session.Phase = GameTipoFase.Turno;
+            session.CurrentPlayerId = session.SetupTurnOrder.First();
+        }
+        else
+        {
+            session.CurrentPlayerId = session.SetupTurnOrder[session.SetupStepIndex];
+        }
+
+        return null;
     }
 
     private static List<int> BuildSetupTurnOrder(List<int> playerIds)
     {
         var reverse = playerIds.Count > 1
-            ? playerIds.Take(playerIds.Count - 1).Reverse()
+            ? playerIds.AsEnumerable().Reverse().ToList()
             : [];
 
         return [.. playerIds, .. reverse];
+    }
+
+    private static bool HasAdjacentSettlement(CatanGameSessionState session, int vertexId)
+    {
+        var adjacentVertexIds = session.Board.Edges
+            .Where(edge => edge.EdgeKey.smallerVertexId == vertexId || edge.EdgeKey.biggerVertexId == vertexId)
+            .Select(edge => edge.EdgeKey.smallerVertexId == vertexId
+                ? edge.EdgeKey.biggerVertexId
+                : edge.EdgeKey.smallerVertexId)
+            .Distinct();
+
+        return adjacentVertexIds.Any(adjacentVertexId =>
+        {
+            var adjacentVertex = session.Board.Vertices.FirstOrDefault(vertex => vertex.VertexId == adjacentVertexId);
+            return adjacentVertex is not null && adjacentVertex.OwnerPlayerId is not null;
+        });
     }
 
     private static CatanBoardState Create34TraditionalBoardState()
@@ -237,6 +425,10 @@ public sealed class CatanGameSessionService : IGameSessionService
     {
         var currentPlayer = session.Players.First(player => player.UsuarioId == session.CurrentPlayerId);
         var canCurrentUserAct = currentPlayer.UsuarioId == usuarioId;
+        var isSetupPhase = session.Phase == GameTipoFase.SetupInicial;
+        var canPlaceInitialSettlement = isSetupPhase && canCurrentUserAct && !session.AwaitingInitialRoadPlacement;
+        var canPlaceInitialRoad = isSetupPhase && canCurrentUserAct && session.AwaitingInitialRoadPlacement && session.PendingInitialRoadFromVertexId is not null;
+        var pendingRoadVertexId = session.PendingInitialRoadFromVertexId;
 
         var result = new GameSessionResponse
         {
@@ -247,9 +439,11 @@ public sealed class CatanGameSessionService : IGameSessionService
             CurrentPlayerNome = currentPlayer.Nome,
             YourPlayerId = usuarioId,
             CanCurrentUserAct = canCurrentUserAct,
-            AvailableActions = canCurrentUserAct
+            AvailableActions = canPlaceInitialSettlement
                 ? [GameActionTypes.PlaceInitialSettlement]
-                : [],
+                : canPlaceInitialRoad
+                    ? [GameActionTypes.PlaceInitialRoad]
+                    : [],
             Players = session.Players
                 .Select(player => new GamePlayerStateResponse
                 {
@@ -269,6 +463,8 @@ public sealed class CatanGameSessionService : IGameSessionService
                 SetupStepIndex = session.SetupStepIndex,
                 SetupTurnOrder = [.. session.SetupTurnOrder],
                 LastPlacedSettlementVertexId = session.LastPlacedSettlementVertexId,
+                AwaitingInitialRoadPlacement = session.AwaitingInitialRoadPlacement,
+                PendingInitialRoadFromVertexId = pendingRoadVertexId,
                 RobberTileId = session.Board.RobberTileId,
                 width = session.Board.width,
                 height = session.Board.height,
@@ -289,7 +485,7 @@ public sealed class CatanGameSessionService : IGameSessionService
                         VertexId = vertex.VertexId,
                         OwnerPlayerId = vertex.OwnerPlayerId,
                         BuildingType = vertex.BuildingType,
-                        IsAvailableForAction = vertex.OwnerPlayerId is null && canCurrentUserAct,
+                        IsAvailableForAction = vertex.OwnerPlayerId is null && canPlaceInitialSettlement,
                         Resources = vertex.Resources,
                         Ports = vertex.Ports,
                         Position = vertex.Position
@@ -301,7 +497,10 @@ public sealed class CatanGameSessionService : IGameSessionService
                         smallerVertexId = edge.EdgeKey.smallerVertexId,
                         biggerVertexId = edge.EdgeKey.biggerVertexId,
                         OwnerPlayerId = edge.OwnerPlayerId,
-                        IsAvailableForAction = false,
+                        IsAvailableForAction = canPlaceInitialRoad &&
+                            edge.OwnerPlayerId is null &&
+                            pendingRoadVertexId is not null &&
+                            (edge.EdgeKey.smallerVertexId == pendingRoadVertexId.Value || edge.EdgeKey.biggerVertexId == pendingRoadVertexId.Value),
                         PointA = edge.PointA,
                         PointB = edge.PointB
                     })
@@ -311,72 +510,6 @@ public sealed class CatanGameSessionService : IGameSessionService
 
         return result;
     }
-
-    private sealed class CatanGameSessionState
-    {
-        public int SalaId { get; set; }
-        public string GameType { get; set; } = LobbyTipoJogo.CatanBase;
-        public GameTipoFase Phase { get; set; } = GameTipoFase.SetupInicial;
-        public int CurrentPlayerId { get; set; }
-        public int SetupStepIndex { get; set; }
-        public List<int> SetupTurnOrder { get; set; } = [];
-        public int? LastPlacedSettlementVertexId { get; set; }
-        public List<CatanPlayerState> Players { get; set; } = [];
-        public CatanBoardState Board { get; set; } = new();
-    }
-
-    private sealed class CatanPlayerState
-    {
-        public int UsuarioId { get; set; }
-        public string Nome { get; set; } = string.Empty;
-        public string Cor { get; set; } = string.Empty;
-        public int Pontos { get; set; }
-        public int RemainingRoads { get; set; }
-        public int RemainingSettlements { get; set; }
-        public int RemainingCities { get; set; }
-        public Dictionary<string, int> Resources { get; set; } = [];
-    }
-
-    private sealed class CatanBoardState
-    {
-        public int? RobberTileId { get; set; }
-        public List<CatanTileState> Tiles { get; set; } = [];
-        public List<CatanVertexState> Vertices { get; set; } = [];
-        public List<CatanEdgeState> Edges { get; set; } = [];
-        public int width { get; set; } = 1000;
-        public int height { get; set; } = 1000;
-    }
-
-    private sealed class CatanTileState
-    {
-        public int TileId { get; set; }
-        public string ResourceType { get; set; } = string.Empty;
-        public int NumberToken { get; set; }
-        public int CubeX { get; set; }
-        public int CubeY { get; set; }
-        public int CubeZ { get; set; }
-        public double CenterX { get; set; }
-        public double CenterY { get; set; }
-    }
-
-    private sealed class CatanVertexState
-    {
-        public int VertexId { get; set; } = 0;
-        public int? OwnerPlayerId { get; set; }
-        public string? BuildingType { get; set; }
-        public Point Position { get; set; }
-        public List<string> Resources { get; set; } = [];
-        public List<string> Ports { get; set; } = [];
-    }
-
-    private sealed class CatanEdgeState
-    {
-        public EdgeKey EdgeKey { get; set; }
-        public int? OwnerPlayerId { get; set; }
-        public Point PointA { get; set; }
-        public Point PointB { get; set; }
-    }
-
 
 }
 

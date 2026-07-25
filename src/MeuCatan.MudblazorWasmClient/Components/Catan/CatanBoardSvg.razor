@@ -10,34 +10,112 @@ else
 {
     var model = CatanBoardLayoutBuilder.Build(State);
     var transform = $"translate({F(_tx)},{F(_ty)}) scale({F(_scale)})";
-    var cursor = _isDragging ? "grabbing" : "grab";
 
     <div @ref="_containerRef" style="width:100%; height:@(DisplayHeight)px; overflow:hidden; user-select:none;"
          @onmousemove="OnMouseMove" @onmouseup="OnMouseUp" @onmouseleave="OnMouseUp">
         <svg width="100%" height="100%" class="catan-board-svg" role="img" aria-label="Tabuleiro do Catan"
              style="display:block;" @onwheel="OnWheel" @onwheel:preventDefault @onmousedown="OnMouseDown">
+            <defs>
+                <linearGradient id="seaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#7dd3fc" />
+                    <stop offset="100%" stop-color="#60a5fa" />
+                </linearGradient>
+
+                <pattern id="paperGrain" width="24" height="24" patternUnits="userSpaceOnUse">
+                    <circle cx="4" cy="6" r="1" fill="#ffffff" fill-opacity="0.06" />
+                    <circle cx="16" cy="14" r="1" fill="#0f172a" fill-opacity="0.035" />
+                    <circle cx="20" cy="4" r="0.8" fill="#0f172a" fill-opacity="0.025" />
+                </pattern>
+
+                <linearGradient id="tileDefaultGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.20" />
+                    <stop offset="100%" stop-color="#000000" stop-opacity="0.08" />
+                </linearGradient>
+
+                <radialGradient id="tokenGradient" cx="35%" cy="30%" r="80%">
+                    <stop offset="0%" stop-color="#fffdf3" />
+                    <stop offset="100%" stop-color="#f5e7bf" />
+                </radialGradient>
+
+                <filter id="tileShadow" x="-25%" y="-25%" width="150%" height="150%">
+                    <feDropShadow dx="0" dy="1.6" stdDeviation="1.6" flood-color="#334155" flood-opacity="0.18" />
+                </filter>
+
+                <filter id="tokenShadow" x="-40%" y="-40%" width="180%" height="180%">
+                    <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#1f2937" flood-opacity="0.20" />
+                </filter>
+            </defs>
+
+            <rect x="0" y="0" width="100%" height="100%" fill="url(#seaGradient)" />
+            <rect x="0" y="0" width="100%" height="100%" fill="url(#paperGrain)" />
+
             <g transform="@transform">
                 @foreach (var tile in model.Tiles)
                 {
-                    <polygon points="@tile.Points" fill="@tile.Fill" stroke="#2f2f2f" stroke-width="2" />
+                    <polygon points="@tile.Points" fill="@tile.Fill" fill-opacity="0.97" stroke="#5b4a3f" stroke-width="1.8"
+                             filter="url(#tileShadow)" />
+                    <polygon points="@tile.Points" fill="url(#tileDefaultGradient)" stroke="none" pointer-events="none" />
                     if (tile.NumberToken != 7)
                     {
+                        var tokenY = tile.CenterY + 35;
+                        var pipCount = GetTokenPipCount(tile.NumberToken);
+                        var pipColor = tile.NumberToken is 6 or 8 ? "#dc2626" : "#7c5f3f";
+
                         <circle cx="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
-                                cy="@((tile.CenterY - 20).ToString(CultureInfo.InvariantCulture))" r="20" fill="white" stroke="#2f2f2f"
-                                stroke-width="2" />
+                                cy="@tokenY.ToString(CultureInfo.InvariantCulture)" r="25" fill="url(#tokenGradient)" stroke="#7c5f3f"
+                                stroke-width="2" filter="url(#tokenShadow)" />
                         <svg:text x="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
-                                  y="@( (tile.CenterY - 20).ToString(CultureInfo.InvariantCulture) )" text-anchor="middle" font-size="16"
-                                  fill="black">
+                                  y="@tokenY.ToString(CultureInfo.InvariantCulture)" text-anchor="middle" font-size="19" font-weight="700"
+                                  fill="#2f2419" dominant-baseline="middle">
                             @tile.NumberToken</svg:text>
+
+                            for (var i = 0; i < pipCount; i++)
+                            {
+                                <circle cx="@F(tile.CenterX + GetPipOffsetX(i, pipCount))" cy="@F(tokenY + 12)" r="2.3" fill="@pipColor" />
+                            }
                         }
                     }
                     @foreach (var vertex in model.Vertices)
                     {
-                        <circle cx="@F(vertex.X)" cy="@F(vertex.Y)" r="6" fill="red" />
+                        if (vertex.IsAvailableForAction)
+                        {
+                            <circle cx="@F(vertex.X)" cy="@F(vertex.Y)" r="18" fill="#86efac" fill-opacity="0.45" stroke="#16a34a"
+                                    stroke-width="2" class="vertex-action" style="cursor:pointer;" pointer-events="all"
+                                    @onclick="() => HandleVertexClick(vertex.VertexId)" @onclick:stopPropagation="true"
+                                    @onmousedown:stopPropagation="true" />
+                        }
                     }
+
+                    @foreach (var vertex in model.Vertices)
+                    {
+                        if (IsVillage(vertex))
+                        {
+                            <g class="village-marker" transform="translate(@F(vertex.X),@F(vertex.Y))" pointer-events="none">
+                                <polygon points="-21,9 0,-18 21,9" fill="@GetVillageRoofColor(vertex.OwnerPlayerId)" stroke="#3f2b1d"
+                                         stroke-width="1.1" />
+                                <rect x="-18" y="9" width="36" height="24" rx="4.2" fill="@GetVillageBodyColor(vertex.OwnerPlayerId)"
+                                      stroke="#3f2b1d" stroke-width="1.1" />
+                                <rect x="-4.2" y="18" width="8.4" height="13.8" rx="2.4" fill="#fef3c7" fill-opacity="0.95" />
+                            </g>
+                        }
+                    }
+
                     @foreach (var edge in model.Edges)
                     {
-                        <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)" stroke="blue" stroke-width="4" />
+                        if (edge.OwnerPlayerId is not null)
+                        {
+                            <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)"
+                                  stroke="@GetRoadColor(edge.OwnerPlayerId)" stroke-width="9" stroke-linecap="round"
+                                  pointer-events="none" />
+                        }
+
+                        if (edge.IsAvailableForAction)
+                        {
+                            <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)" stroke="#22c55e"
+                                  stroke-opacity="0.55" stroke-width="16" stroke-linecap="round" class="edge-action"
+                                  style="cursor:pointer;" pointer-events="stroke" @onclick="() => HandleEdgeClick(edge)"
+                                  @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" />
+                        }
                     }
                 </g>
             </svg>
@@ -54,6 +132,8 @@ else
     [Parameter] public CatanGameStateResponse? State { get; set; }
     [Parameter] public double DisplayWidth { get; set; } = 900;
     [Parameter] public double DisplayHeight { get; set; } = 700;
+    [Parameter] public EventCallback<int> OnVertexClicked { get; set; }
+    [Parameter] public EventCallback<EdgeKey> OnEdgeClicked { get; set; }
 
     // Transform state: translate(_tx, _ty) scale(_scale)
     private double _tx;
@@ -136,6 +216,16 @@ else
 
     private void OnMouseUp(MouseEventArgs e) => _isDragging = false;
 
+    private Task HandleVertexClick(int vertexId)
+    {
+        return OnVertexClicked.InvokeAsync(vertexId);
+    }
+
+    private Task HandleEdgeClick(CatanSvgEdge edge)
+    {
+        return OnEdgeClicked.InvokeAsync(new EdgeKey(edge.smallerVertexId, edge.biggerVertexId));
+    }
+
     // Ensures at least `margin` px of canvas remains visible on each side
     private void ClampPan()
     {
@@ -148,5 +238,86 @@ else
 
     private static string F(double v) => v.ToString("F4", CultureInfo.InvariantCulture);
 
+    private static int GetTokenPipCount(int numberToken)
+    {
+        // Catan probability pips: 2/12=1 ... 6/8=5
+        var pips = 6 - Math.Abs(7 - numberToken);
+        return Math.Clamp(pips, 0, 5);
+    }
+
+    private static double GetPipOffsetX(int index, int total)
+    {
+        const double spacing = 5.7;
+        return (index - (total - 1) / 2.0) * spacing;
+    }
+
+    private static bool IsVillage(CatanSvgVertex vertex)
+    {
+        return vertex.OwnerPlayerId is not null
+            && string.Equals(vertex.BuildingType, "aldeia", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetVillageBodyColor(int? ownerPlayerId)
+    {
+        return ((ownerPlayerId ?? 0) % 6) switch
+        {
+            0 => "#fde68a",
+            1 => "#fca5a5",
+            2 => "#86efac",
+            3 => "#93c5fd",
+            4 => "#d8b4fe",
+            _ => "#fdba74"
+        };
+    }
+
+    private static string GetVillageRoofColor(int? ownerPlayerId)
+    {
+        return ((ownerPlayerId ?? 0) % 6) switch
+        {
+            0 => "#b45309",
+            1 => "#b91c1c",
+            2 => "#166534",
+            3 => "#1d4ed8",
+            4 => "#7e22ce",
+            _ => "#c2410c"
+        };
+    }
+
+    private static string GetRoadColor(int? ownerPlayerId)
+    {
+        return ((ownerPlayerId ?? 0) % 6) switch
+        {
+            0 => "#f59e0b",
+            1 => "#ef4444",
+            2 => "#22c55e",
+            3 => "#3b82f6",
+            4 => "#a855f7",
+            _ => "#f97316"
+        };
+    }
+
     private record ElementBounds(double Width, double Height);
 }
+
+<style>
+    .catan-board-svg .vertex-action {
+        transition: fill-opacity 120ms ease, stroke-width 120ms ease, transform 120ms ease;
+        transform-box: fill-box;
+        transform-origin: center;
+    }
+
+    .catan-board-svg .vertex-action:hover {
+        fill-opacity: 0.62;
+        stroke-width: 2.6;
+        transform: scale(1.06);
+    }
+
+    .catan-board-svg .edge-action {
+        transition: stroke-opacity 120ms ease, stroke-width 120ms ease;
+    }
+
+    .catan-board-svg .edge-action:hover {
+        stroke-opacity: 0.8;
+        stroke-width: 18;
+    }
+</style>

@@ -1,0 +1,162 @@
+@implements IAsyncDisposable
+@inject ClienteAuthService AuthService
+@inject HttpClient Http
+@using Microsoft.AspNetCore.SignalR.Client
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h6">Chat da Partida</MudText>
+
+    @if (!string.IsNullOrWhiteSpace(_chatErro))
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@_chatErro</MudAlert>
+    }
+
+    <MudPaper Outlined="true" Class="pa-2 mb-2" Style="height: 240px; overflow-y: auto;">
+        @if (_chatMessages.Count == 0)
+        {
+            <MudText Typo="Typo.caption">Nenhuma mensagem ainda.</MudText>
+        }
+        else
+        {
+            @foreach (var message in _chatMessages)
+            {
+                <MudStack Spacing="0" Class="mb-1">
+                    <MudText Typo="Typo.caption">
+                        <strong>@message.UsuarioNome</strong>
+                        (@message.EnviadaEmUtc.ToLocalTime().ToString("HH:mm"))
+                    </MudText>
+                    <MudText Typo="Typo.body2">@message.Mensagem</MudText>
+                </MudStack>
+            }
+        }
+    </MudPaper>
+
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+        <MudTextField Label="Mensagem" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                      Class="flex-grow-1" @bind-Value="_chatInput" OnKeyDown="OnChatKeyDown" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   Disabled="@(_chatHubConnection is null || _chatHubConnection.State != HubConnectionState.Connected || _enviandoChat)"
+                   OnClick="EnviarMensagemChatAsync">
+            @(_enviandoChat ? "..." : "Enviar")
+        </MudButton>
+    </MudStack>
+
+    <MudText Typo="Typo.caption" Class="mt-1">
+        Status: @(_chatHubConnection?.State.ToString() ?? "Desconectado")
+    </MudText>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public int SalaId { get; set; }
+
+    private HubConnection? _chatHubConnection;
+    private readonly List<GameChatMessageResponse> _chatMessages = [];
+    private string _chatInput = string.Empty;
+    private bool _enviandoChat;
+    private string? _chatErro;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await InicializarChatAsync();
+    }
+
+    private async Task InicializarChatAsync()
+    {
+        _chatErro = null;
+
+        var token = await AuthService.EnsureSessionAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            _chatErro = "Sessão inválida para conectar no chat.";
+            return;
+        }
+
+        var hubUri = new Uri(Http.BaseAddress!, "hubs/game-chat");
+
+        _chatHubConnection = new HubConnectionBuilder()
+            .WithUrl(hubUri, options =>
+            {
+                options.AccessTokenProvider = AuthService.EnsureSessionAsync;
+            })
+            .WithAutomaticReconnect()
+            .Build();
+
+        _chatHubConnection.On<List<GameChatMessageResponse>>("ReceiveChatHistory", messages =>
+        {
+            _chatMessages.Clear();
+            _chatMessages.AddRange(messages.OrderBy(m => m.EnviadaEmUtc));
+            return InvokeAsync(StateHasChanged);
+        });
+
+        _chatHubConnection.On<GameChatMessageResponse>("ReceiveChatMessage", message =>
+        {
+            _chatMessages.Add(message);
+
+            if (_chatMessages.Count > 100)
+            {
+                _chatMessages.RemoveAt(0);
+            }
+
+            return InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            await _chatHubConnection.StartAsync();
+            await _chatHubConnection.InvokeAsync("JoinGameRoom", SalaId);
+        }
+        catch (Exception ex)
+        {
+            _chatErro = $"Falha ao conectar no chat: {ex.Message}";
+        }
+    }
+
+    private async Task EnviarMensagemChatAsync()
+    {
+        if (_chatHubConnection is null || _chatHubConnection.State != HubConnectionState.Connected)
+        {
+            _chatErro = "Chat desconectado.";
+            return;
+        }
+
+        var mensagem = _chatInput.Trim();
+        if (string.IsNullOrWhiteSpace(mensagem))
+        {
+            return;
+        }
+
+        _chatErro = null;
+        _enviandoChat = true;
+
+        try
+        {
+            await _chatHubConnection.InvokeAsync("SendMessage", SalaId, mensagem);
+            _chatInput = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _chatErro = $"Falha ao enviar mensagem: {ex.Message}";
+        }
+        finally
+        {
+            _enviandoChat = false;
+        }
+    }
+
+    private async Task OnChatKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await EnviarMensagemChatAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_chatHubConnection is not null)
+        {
+            await _chatHubConnection.DisposeAsync();
+        }
+    }
+}

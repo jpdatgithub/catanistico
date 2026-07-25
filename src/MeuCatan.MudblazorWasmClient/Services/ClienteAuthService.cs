@@ -73,18 +73,6 @@ namespace MeuCatan.MudblazorWasmClient.Services
 
         public async Task<string?> EnsureSessionAsync()
         {
-            var token = await _authStateProvider.GetTokenAsync();
-            if (!string.IsNullOrWhiteSpace(token))
-            {
-                return token;
-            }
-
-            var guestResult = await ContinueAsGuestAsync();
-            if (!guestResult.Success)
-            {
-                return null;
-            }
-
             return await _authStateProvider.GetTokenAsync();
         }
 
@@ -108,6 +96,23 @@ namespace MeuCatan.MudblazorWasmClient.Services
             }
 
             return await response.Content.ReadFromJsonAsync<ClientProfileResponse>();
+        }
+
+        public async Task<(bool Success, string? ErrorMessage)> ChangePasswordAsync(ChangePasswordClientRequest requestBody)
+        {
+            using var request = await CreateAuthenticatedRequestAsync(HttpMethod.Post, "api/cliente-auth/change-password", requestBody);
+            if (request is null)
+            {
+                return (false, "Sessão inválida.");
+            }
+
+            using var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return (false, await ReadErrorAsync(response, "Não foi possível atualizar a senha."));
+            }
+
+            return (true, null);
         }
 
         public async Task<(bool Success, LobbyListarSalasResponse? Data, string? ErrorMessage)> ListarSalasAsync()
@@ -271,6 +276,26 @@ namespace MeuCatan.MudblazorWasmClient.Services
                 : (true, data, null);
         }
 
+        public async Task<(bool Success, LobbyDetalheSalaResponse? Data, string? ErrorMessage)> EnviarHeartbeatSalaAsync(int salaId)
+        {
+            using var request = await CreateAuthenticatedRequestAsync(HttpMethod.Post, $"api/lobby/salas/{salaId}/heartbeat");
+            if (request is null)
+            {
+                return (false, null, "Sessão inválida.");
+            }
+
+            using var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return (false, null, await ReadErrorAsync(response, "Não foi possível atualizar presença na sala."));
+            }
+
+            var data = await response.Content.ReadFromJsonAsync<LobbyDetalheSalaResponse>();
+            return data is null
+                ? (false, null, "Resposta inválida ao atualizar presença da sala.")
+                : (true, data, null);
+        }
+
         public async Task<(bool Success, LobbyIniciarJogoResponse? Data, string? ErrorMessage)> IniciarJogoAsync(int salaId)
         {
             using var request = await CreateAuthenticatedRequestAsync(HttpMethod.Post, $"api/lobby/salas/{salaId}/iniciar");
@@ -308,6 +333,26 @@ namespace MeuCatan.MudblazorWasmClient.Services
             var data = await response.Content.ReadFromJsonAsync<GameSessionResponse>();
             return data is null
                 ? (false, null, "Resposta inválida ao carregar a sessão do jogo.")
+                : (true, data, null);
+        }
+
+        public async Task<(bool Success, GameSessionResponse? Data, string? ErrorMessage)> ExecutarAcaoJogoAsync(int salaId, GameActionRequest requestBody)
+        {
+            using var request = await CreateAuthenticatedRequestAsync(HttpMethod.Post, $"api/jogo/{salaId}/acao", requestBody);
+            if (request is null)
+            {
+                return (false, null, "Sessão inválida.");
+            }
+
+            using var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return (false, null, await ReadErrorAsync(response, "Não foi possível executar a ação do jogo."));
+            }
+
+            var data = await response.Content.ReadFromJsonAsync<GameSessionResponse>();
+            return data is null
+                ? (false, null, "Resposta inválida ao executar a ação do jogo.")
                 : (true, data, null);
         }
 
