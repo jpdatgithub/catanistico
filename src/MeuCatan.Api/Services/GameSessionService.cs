@@ -14,6 +14,15 @@ public interface IGameSessionService
 public sealed class CatanGameSessionService : IGameSessionService
 {
     private static readonly string[] PlayerColors = ["vermelho", "azul", "branco", "laranja"];
+    private static readonly string[] PortTypePool =
+    [
+        "generic_3to1", "generic_3to1", "generic_3to1", "generic_3to1",
+        "wood_2to1", "brick_2to1", "sheep_2to1", "wheat_2to1", "ore_2to1"
+    ];
+    private const int FixedPortSlotCount = 9;
+    private const string SettlementBuildingType = "aldeia";
+    private const double HexRadius = 100.0;
+    private const double VertexAdjacencyTolerance = 1.0;
 
     private static readonly (int X, int Y, int Z)[] OrderedOuterCoordinates =
     [
@@ -129,11 +138,6 @@ public sealed class CatanGameSessionService : IGameSessionService
                 return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não participa desta sessão.");
             }
 
-            if (session.Phase != GameTipoFase.SetupInicial)
-            {
-                return LobbyOperationResult<GameSessionResponse>.Validation("A fase atual não permite posicionamento inicial.");
-            }
-
             if (session.CurrentPlayerId != usuarioId)
             {
                 return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não pode agir agora.");
@@ -141,6 +145,11 @@ public sealed class CatanGameSessionService : IGameSessionService
 
             if (string.Equals(request.ActionType, GameActionTypes.PlaceInitialSettlement, StringComparison.OrdinalIgnoreCase))
             {
+                if (session.Phase != GameTipoFase.SetupInicial)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("A fase atual não permite posicionamento inicial.");
+                }
+
                 var placeSettlementResult = TryPlaceInitialSettlement(session, actingPlayer, usuarioId, request.VertexId);
                 if (placeSettlementResult is not null)
                 {
@@ -149,10 +158,41 @@ public sealed class CatanGameSessionService : IGameSessionService
             }
             else if (string.Equals(request.ActionType, GameActionTypes.PlaceInitialRoad, StringComparison.OrdinalIgnoreCase))
             {
+                if (session.Phase != GameTipoFase.SetupInicial)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("A fase atual não permite posicionamento inicial.");
+                }
+
                 var placeRoadResult = TryPlaceInitialRoad(session, actingPlayer, usuarioId, request.SmallerVertexId, request.BiggerVertexId);
                 if (placeRoadResult is not null)
                 {
                     return placeRoadResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.RollDice, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("A fase atual não permite rolar os dados.");
+                }
+
+                var rollDiceResult = TryRollDice(session);
+                if (rollDiceResult is not null)
+                {
+                    return rollDiceResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.EndTurn, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("A fase atual não permite passar o turno.");
+                }
+
+                var endTurnResult = TryEndTurn(session);
+                if (endTurnResult is not null)
+                {
+                    return endTurnResult;
                 }
             }
             else
@@ -284,6 +324,103 @@ public sealed class CatanGameSessionService : IGameSessionService
         return [.. playerIds, .. reverse];
     }
 
+    private static LobbyOperationResult<GameSessionResponse>? TryRollDice(CatanGameSessionState session)
+    {
+        if (session.HasRolledDiceThisTurn)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você já rolou os dados neste turno.");
+        }
+
+        var dice1 = Random.Shared.Next(1, 7);
+        var dice2 = Random.Shared.Next(1, 7);
+
+        session.LastDice1 = dice1;
+        session.LastDice2 = dice2;
+        session.HasRolledDiceThisTurn = true;
+        session.LastRollResourceGains = [];
+
+        var rolledTotal = dice1 + dice2;
+        if (rolledTotal != 7)
+        {
+            DistributeResourcesForRoll(session, rolledTotal);
+        }
+
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryEndTurn(CatanGameSessionState session)
+    {
+        if (!session.HasRolledDiceThisTurn)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você precisa rolar os dados antes de passar o turno.");
+        }
+
+        var currentIndex = session.Players.FindIndex(player => player.UsuarioId == session.CurrentPlayerId);
+        var nextIndex = (currentIndex + 1) % session.Players.Count;
+        session.CurrentPlayerId = session.Players[nextIndex].UsuarioId;
+        session.HasRolledDiceThisTurn = false;
+
+        return null;
+    }
+
+    private static void DistributeResourcesForRoll(CatanGameSessionState session, int rolledTotal)
+    {
+        var playersById = session.Players.ToDictionary(player => player.UsuarioId);
+        var gainsByPlayerAndResource = new Dictionary<(int UsuarioId, string ResourceType), int>();
+
+        var producingTiles = session.Board.Tiles.Where(tile =>
+            tile.NumberToken == rolledTotal &&
+            !string.Equals(tile.ResourceType, DesertResourceType, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var tile in producingTiles)
+        {
+            foreach (var vertex in GetVerticesAdjacentToTile(session.Board, tile))
+            {
+                if (vertex.OwnerPlayerId is null
+                    || !string.Equals(vertex.BuildingType, SettlementBuildingType, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!playersById.TryGetValue(vertex.OwnerPlayerId.Value, out var owner))
+                {
+                    continue;
+                }
+
+                owner.Resources.TryGetValue(tile.ResourceType, out var currentAmount);
+                owner.Resources[tile.ResourceType] = currentAmount + 1;
+
+                var gainKey = (owner.UsuarioId, tile.ResourceType);
+                gainsByPlayerAndResource.TryGetValue(gainKey, out var gainedAmount);
+                gainsByPlayerAndResource[gainKey] = gainedAmount + 1;
+            }
+        }
+
+        session.LastRollResourceGains = gainsByPlayerAndResource
+            .Select(entry => new CatanResourceGainState
+            {
+                UsuarioId = entry.Key.UsuarioId,
+                ResourceType = entry.Key.ResourceType,
+                Amount = entry.Value
+            })
+            .ToList();
+    }
+
+    private static IEnumerable<CatanVertexState> GetVerticesAdjacentToTile(CatanBoardState board, CatanTileState tile)
+    {
+        foreach (var vertex in board.Vertices)
+        {
+            var dx = vertex.Position.X - tile.CenterX;
+            var dy = vertex.Position.Y - tile.CenterY;
+            var distance = Math.Sqrt((dx * dx) + (dy * dy));
+
+            if (Math.Abs(distance - HexRadius) <= VertexAdjacencyTolerance)
+            {
+                yield return vertex;
+            }
+        }
+    }
+
     private static bool IsSecondSetupSettlementPlacement(CatanGameSessionState session)
     {
         if (session.SetupTurnOrder.Count == 0)
@@ -367,6 +504,7 @@ public sealed class CatanGameSessionService : IGameSessionService
 
         var vertices = new Dictionary<Point, CatanVertexState>();
         var edges = new Dictionary<EdgeKey, CatanEdgeState>();
+        var edgeTouchCounts = new Dictionary<EdgeKey, int>();
 
         var tiles = OrderedTiles
             .Select((hexagon, index) =>
@@ -401,6 +539,9 @@ public sealed class CatanGameSessionService : IGameSessionService
                     if (i != 0)
                     {
                         var edgeKey = new EdgeKey(previousVertex.VertexId, catanVertex.VertexId);
+                        edgeTouchCounts.TryGetValue(edgeKey, out var edgeTouchCount);
+                        edgeTouchCounts[edgeKey] = edgeTouchCount + 1;
+
                         if (!edges.ContainsKey(edgeKey))
                         {
                             edges[edgeKey] = new CatanEdgeState
@@ -414,6 +555,9 @@ public sealed class CatanGameSessionService : IGameSessionService
                         if (i == points.Count - 1)
                         {
                             edgeKey = new EdgeKey(catanVertex.VertexId, firstVertex.VertexId);
+                            edgeTouchCounts.TryGetValue(edgeKey, out edgeTouchCount);
+                            edgeTouchCounts[edgeKey] = edgeTouchCount + 1;
+
                             if (!edges.ContainsKey(edgeKey))
                             {
                                 edges[edgeKey] = new CatanEdgeState
@@ -450,7 +594,102 @@ public sealed class CatanGameSessionService : IGameSessionService
         board.Tiles = tiles;
         board.Edges = edges.Values.ToList();
 
+        AssignFixedPositionPorts(board, edgeTouchCounts);
+
         return board;
+    }
+
+    private static void AssignFixedPositionPorts(CatanBoardState board, Dictionary<EdgeKey, int> edgeTouchCounts)
+    {
+        foreach (var vertex in board.Vertices)
+        {
+            vertex.Ports.Clear();
+        }
+
+        var coastalEdges = board.Edges
+            .Where(edge => edgeTouchCounts.GetValueOrDefault(edge.EdgeKey) == 1)
+            .OrderBy(edge => GetEdgeAngleFromBoardCenter(edge, board))
+            .ToList();
+
+        if (coastalEdges.Count == 0)
+        {
+            return;
+        }
+
+        var selectedSlotEdges = SelectFixedPortSlots(coastalEdges, FixedPortSlotCount);
+        var shuffledPortTypes = PortTypePool.ToList();
+        Random.Shared.Shuffle(CollectionsMarshal.AsSpan(shuffledPortTypes));
+
+        var verticesById = board.Vertices.ToDictionary(vertex => vertex.VertexId);
+        for (int i = 0; i < selectedSlotEdges.Count && i < shuffledPortTypes.Count; i++)
+        {
+            var slotEdge = selectedSlotEdges[i];
+            var portType = shuffledPortTypes[i];
+
+            TryAttachPort(verticesById, slotEdge.EdgeKey.smallerVertexId, portType);
+            TryAttachPort(verticesById, slotEdge.EdgeKey.biggerVertexId, portType);
+        }
+    }
+
+    private static List<CatanEdgeState> SelectFixedPortSlots(List<CatanEdgeState> coastalEdges, int desiredSlots)
+    {
+        var selected = new List<CatanEdgeState>();
+        var chosenIndexes = new HashSet<int>();
+        var slotsToSelect = Math.Min(desiredSlots, coastalEdges.Count);
+
+        for (int slot = 0; slot < slotsToSelect; slot++)
+        {
+            var proportionalIndex = (int)Math.Floor(slot * (coastalEdges.Count / (double)slotsToSelect));
+            var candidateIndex = Math.Clamp(proportionalIndex, 0, coastalEdges.Count - 1);
+
+            if (!chosenIndexes.Add(candidateIndex))
+            {
+                candidateIndex = FindNextAvailableIndex(candidateIndex, coastalEdges.Count, chosenIndexes);
+            }
+
+            chosenIndexes.Add(candidateIndex);
+            selected.Add(coastalEdges[candidateIndex]);
+        }
+
+        return selected;
+    }
+
+    private static int FindNextAvailableIndex(int startIndex, int total, HashSet<int> chosenIndexes)
+    {
+        for (int offset = 1; offset < total; offset++)
+        {
+            var nextIndex = (startIndex + offset) % total;
+            if (!chosenIndexes.Contains(nextIndex))
+            {
+                return nextIndex;
+            }
+        }
+
+        return startIndex;
+    }
+
+    private static double GetEdgeAngleFromBoardCenter(CatanEdgeState edge, CatanBoardState board)
+    {
+        var midpointX = (edge.PointA.X + edge.PointB.X) / 2.0;
+        var midpointY = (edge.PointA.Y + edge.PointB.Y) / 2.0;
+        var dx = midpointX - (board.width / 2.0);
+        var dy = midpointY - (board.height / 2.0);
+
+        var angle = Math.Atan2(dy, dx);
+        return angle < 0 ? angle + (Math.PI * 2.0) : angle;
+    }
+
+    private static void TryAttachPort(Dictionary<int, CatanVertexState> verticesById, int vertexId, string portType)
+    {
+        if (!verticesById.TryGetValue(vertexId, out var vertex))
+        {
+            return;
+        }
+
+        if (!vertex.Ports.Contains(portType, StringComparer.OrdinalIgnoreCase))
+        {
+            vertex.Ports.Add(portType);
+        }
     }
 
     private static GameSessionResponse ToResponse(CatanGameSessionState session, int usuarioId)
@@ -462,6 +701,28 @@ public sealed class CatanGameSessionService : IGameSessionService
         var canPlaceInitialRoad = isSetupPhase && canCurrentUserAct && session.AwaitingInitialRoadPlacement && session.PendingInitialRoadFromVertexId is not null;
         var pendingRoadVertexId = session.PendingInitialRoadFromVertexId;
 
+        var isTurnPhase = session.Phase == GameTipoFase.Turno;
+        var canRollDice = isTurnPhase && canCurrentUserAct && !session.HasRolledDiceThisTurn;
+        var canEndTurn = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn;
+
+        var availableActions = new List<string>();
+        if (canPlaceInitialSettlement)
+        {
+            availableActions.Add(GameActionTypes.PlaceInitialSettlement);
+        }
+        if (canPlaceInitialRoad)
+        {
+            availableActions.Add(GameActionTypes.PlaceInitialRoad);
+        }
+        if (canRollDice)
+        {
+            availableActions.Add(GameActionTypes.RollDice);
+        }
+        if (canEndTurn)
+        {
+            availableActions.Add(GameActionTypes.EndTurn);
+        }
+
         var result = new GameSessionResponse
         {
             SalaId = session.SalaId,
@@ -471,11 +732,7 @@ public sealed class CatanGameSessionService : IGameSessionService
             CurrentPlayerNome = currentPlayer.Nome,
             YourPlayerId = usuarioId,
             CanCurrentUserAct = canCurrentUserAct,
-            AvailableActions = canPlaceInitialSettlement
-                ? [GameActionTypes.PlaceInitialSettlement]
-                : canPlaceInitialRoad
-                    ? [GameActionTypes.PlaceInitialRoad]
-                    : [],
+            AvailableActions = availableActions,
             Players = session.Players
                 .Select(player => new GamePlayerStateResponse
                 {
@@ -497,6 +754,21 @@ public sealed class CatanGameSessionService : IGameSessionService
                 LastPlacedSettlementVertexId = session.LastPlacedSettlementVertexId,
                 AwaitingInitialRoadPlacement = session.AwaitingInitialRoadPlacement,
                 PendingInitialRoadFromVertexId = pendingRoadVertexId,
+                HasRolledDiceThisTurn = session.HasRolledDiceThisTurn,
+                LastDice1 = session.LastDice1,
+                LastDice2 = session.LastDice2,
+                LastDiceTotal = session.LastDice1 is not null && session.LastDice2 is not null
+                    ? session.LastDice1 + session.LastDice2
+                    : null,
+                LastRollResourceGains = session.LastRollResourceGains
+                    .Select(gain => new GameResourceGainResponse
+                    {
+                        UsuarioId = gain.UsuarioId,
+                        PlayerNome = session.Players.FirstOrDefault(player => player.UsuarioId == gain.UsuarioId)?.Nome ?? string.Empty,
+                        ResourceType = gain.ResourceType,
+                        Amount = gain.Amount
+                    })
+                    .ToList(),
                 RobberTileId = session.Board.RobberTileId,
                 width = session.Board.width,
                 height = session.Board.height,

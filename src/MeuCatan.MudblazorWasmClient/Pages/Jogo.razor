@@ -158,6 +158,60 @@
                                         }
                                     </MudPaper>
 
+                                    @if (_session.Phase == GameTipoFase.Turno && _session.CatanState is not null)
+                                    {
+                                        <MudPaper Class="pa-4">
+                                            <MudText Typo="Typo.h6">Turno</MudText>
+
+                                            <MudButton Variant="Variant.Filled"
+                                                       Color="Color.Primary"
+                                                       Class="mt-2"
+                                                       Disabled="@(!PodeRolarDados)"
+                                                       OnClick="ExecutarRolagemDadosAsync">
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                    <DiceFace Value="@(_session.CatanState.LastDice1 ?? 6)" Size="36" />
+                                                    <DiceFace Value="@(_session.CatanState.LastDice2 ?? 6)" Size="36" />
+                                                    <MudText Typo="Typo.button" Class="ml-1">Rolar dados</MudText>
+                                                </MudStack>
+                                            </MudButton>
+
+                                            @if (_session.CatanState.LastDiceTotal is not null)
+                                            {
+                                                <MudText Typo="Typo.body1" Class="mt-2">
+                                                    Último resultado: @_session.CatanState.LastDice1 + @_session.CatanState.LastDice2 =
+                                                    <b>@_session.CatanState.LastDiceTotal</b>
+                                                </MudText>
+
+                                                @if (_session.CatanState.HasRolledDiceThisTurn)
+                                                {
+                                                    @if (_session.CatanState.LastDiceTotal == 7)
+                                                    {
+                                                        <MudText Typo="Typo.body2">Saiu 7: ninguém recebe recursos.</MudText>
+                                                    }
+                                                    else if (_session.CatanState.LastRollResourceGains.Count == 0)
+                                                    {
+                                                        <MudText Typo="Typo.body2">Nenhum jogador produziu recursos nesta rolagem.</MudText>
+                                                    }
+                                                    else
+                                                    {
+                                                        @foreach (var gain in _session.CatanState.LastRollResourceGains)
+                                                        {
+                                                            <MudText Typo="Typo.body2">@gain.PlayerNome recebeu +@gain.Amount @gain.ResourceType</MudText>
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            <MudButton Variant="Variant.Outlined"
+                                                       Color="Color.Secondary"
+                                                       Class="mt-3"
+                                                       Disabled="@(!PodePassarTurno)"
+                                                       OnClick="ExecutarPassarTurnoAsync">
+                                                Passar turno
+                                            </MudButton>
+                                        </MudPaper>
+                                    }
+
                                     <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="@($"/sala/{SalaId}")">
                                         Voltar para a sala
                                     </MudButton>
@@ -196,6 +250,12 @@ StringComparison.OrdinalIgnoreCase)
         && EnableDebugStatePanelInDevelopment;
     private string SessionDebugJson => _sessionDebugJson;
     private string CatanStateDebugJson => _catanStateDebugJson;
+
+    private bool PodeRolarDados => !_carregando
+        && _session?.AvailableActions.Contains(GameActionTypes.RollDice) == true;
+
+    private bool PodePassarTurno => !_carregando
+        && _session?.AvailableActions.Contains(GameActionTypes.EndTurn) == true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -281,6 +341,43 @@ StringComparison.OrdinalIgnoreCase)
         }
 
         AtualizarSessionState(result.Data);
+    }
+
+    private async Task ExecutarRolagemDadosAsync()
+    {
+        await ExecutarAcaoDeTurnoAsync(GameActionTypes.RollDice, "Não foi possível rolar os dados.");
+    }
+
+    private async Task ExecutarPassarTurnoAsync()
+    {
+        await ExecutarAcaoDeTurnoAsync(GameActionTypes.EndTurn, "Não foi possível passar o turno.");
+    }
+
+    private async Task ExecutarAcaoDeTurnoAsync(string actionType, string mensagemErroPadrao)
+    {
+        if (_session is null || _carregando)
+        {
+            return;
+        }
+
+        _acaoErro = null;
+        _carregando = true;
+
+        var result = await AuthService.ExecutarAcaoJogoAsync(SalaId, new GameActionRequest
+        {
+            ActionType = actionType
+        });
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _acaoErro = result.ErrorMessage ?? mensagemErroPadrao;
+            return;
+        }
+
+        AtualizarSessionState(result.Data);
+        HabilitarPollingRapidoTemporario();
     }
 
     private async Task IniciarPollingAsync(CancellationToken cancellationToken)

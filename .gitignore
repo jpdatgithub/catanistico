@@ -1,4 +1,5 @@
 ## .NET / C# / Blazor
+.tmp-build/*
 
 # Build outputs
 bin/

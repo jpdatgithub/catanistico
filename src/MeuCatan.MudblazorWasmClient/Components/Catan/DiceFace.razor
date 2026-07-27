@@ -1,0 +1,35 @@
+@* Face de dado clássica (1 a 6) renderizada em SVG com pips. *@
+<svg width="@Size" height="@Size" viewBox="0 0 100 100" role="img" aria-label="@($"Dado mostrando {Value}")">
+    <rect x="3" y="3" width="94" height="94" rx="18" fill="#fffdf7" stroke="#3e2723" stroke-width="5" />
+    @foreach (var pip in GetPips(Value))
+    {
+        <circle cx="@pip.X" cy="@pip.Y" r="9" fill="#3e2723" />
+    }
+</svg>
+
+@code {
+    [Parameter]
+    public int Value { get; set; } = 1;
+
+    [Parameter]
+    public int Size { get; set; } = 40;
+
+    private static readonly (int X, int Y) Center = (50, 50);
+    private static readonly (int X, int Y) TopLeft = (28, 28);
+    private static readonly (int X, int Y) TopRight = (72, 28);
+    private static readonly (int X, int Y) MiddleLeft = (28, 50);
+    private static readonly (int X, int Y) MiddleRight = (72, 50);
+    private static readonly (int X, int Y) BottomLeft = (28, 72);
+    private static readonly (int X, int Y) BottomRight = (72, 72);
+
+    private static IEnumerable<(int X, int Y)> GetPips(int value) => value switch
+    {
+        1 => [Center],
+        2 => [TopLeft, BottomRight],
+        3 => [TopLeft, Center, BottomRight],
+        4 => [TopLeft, TopRight, BottomLeft, BottomRight],
+        5 => [TopLeft, TopRight, Center, BottomLeft, BottomRight],
+        6 => [TopLeft, TopRight, MiddleLeft, MiddleRight, BottomLeft, BottomRight],
+        _ => []
+    };
+}

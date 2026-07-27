@@ -55,6 +55,7 @@ else
                     <polygon points="@tile.Points" fill="@tile.Fill" fill-opacity="0.97" stroke="#5b4a3f" stroke-width="1.8"
                              filter="url(#tileShadow)" />
                     <polygon points="@tile.Points" fill="url(#tileDefaultGradient)" stroke="none" pointer-events="none" />
+
                     if (tile.NumberToken != 7)
                     {
                         var tokenY = tile.CenterY + 35;
@@ -67,60 +68,74 @@ else
                         <svg:text x="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
                                   y="@tokenY.ToString(CultureInfo.InvariantCulture)" text-anchor="middle" font-size="19" font-weight="700"
                                   fill="#2f2419" dominant-baseline="middle">
-                            @tile.NumberToken</svg:text>
+                            @tile.NumberToken
+                        </svg:text>
 
-                            for (var i = 0; i < pipCount; i++)
-                            {
-                                <circle cx="@F(tile.CenterX + GetPipOffsetX(i, pipCount))" cy="@F(tokenY + 12)" r="2.3" fill="@pipColor" />
-                            }
+                        for (var i = 0; i < pipCount; i++)
+                        {
+                            <circle cx="@F(tile.CenterX + GetPipOffsetX(i, pipCount))" cy="@F(tokenY + 12)" r="2.3" fill="@pipColor" />
                         }
                     }
-                    @foreach (var vertex in model.Vertices)
+                }
+
+                @foreach (var port in model.Ports)
+                {
+                    <line x1="@F(port.AnchorX)" y1="@F(port.AnchorY)" x2="@F(port.X)" y2="@F(port.Y)" stroke="#0f172a"
+                          stroke-width="2" stroke-opacity="0.40" pointer-events="none" />
+                    <rect x="@F(port.X - 28)" y="@F(port.Y - 12)" width="56" height="24" rx="7" fill="#ecfeff"
+                          fill-opacity="0.90" stroke="#0369a1" stroke-width="1.3" pointer-events="none" />
+                    <svg:text x="@F(port.X)" y="@F(port.Y)" text-anchor="middle" font-size="9.5" font-weight="700"
+                              fill="#0f172a" dominant-baseline="middle" pointer-events="none">
+                        @port.Label
+                    </svg:text>
+                }
+
+                @foreach (var edge in model.Edges)
+                {
+                    if (edge.OwnerPlayerId is not null)
                     {
-                        if (vertex.IsAvailableForAction)
-                        {
-                            <circle cx="@F(vertex.X)" cy="@F(vertex.Y)" r="18" fill="#86efac" fill-opacity="0.45" stroke="#16a34a"
-                                    stroke-width="2" class="vertex-action" style="cursor:pointer;" pointer-events="all"
-                                    @onclick="() => HandleVertexClick(vertex.VertexId)" @onclick:stopPropagation="true"
-                                    @onmousedown:stopPropagation="true" />
-                        }
+                        <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)"
+                              stroke="@GetRoadColor(edge.OwnerPlayerId)" stroke-width="9" stroke-linecap="round"
+                              pointer-events="none" />
                     }
 
-                    @foreach (var vertex in model.Vertices)
+                    if (edge.IsAvailableForAction)
                     {
-                        if (IsVillage(vertex))
-                        {
-                            <g class="village-marker" transform="translate(@F(vertex.X),@F(vertex.Y))" pointer-events="none">
-                                <polygon points="-21,9 0,-18 21,9" fill="@GetVillageRoofColor(vertex.OwnerPlayerId)" stroke="#3f2b1d"
-                                         stroke-width="1.1" />
-                                <rect x="-18" y="9" width="36" height="24" rx="4.2" fill="@GetVillageBodyColor(vertex.OwnerPlayerId)"
-                                      stroke="#3f2b1d" stroke-width="1.1" />
-                                <rect x="-4.2" y="18" width="8.4" height="13.8" rx="2.4" fill="#fef3c7" fill-opacity="0.95" />
-                            </g>
-                        }
+                        <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)" stroke="#22c55e"
+                              stroke-opacity="0.55" stroke-width="16" stroke-linecap="round" class="edge-action"
+                              style="cursor:pointer;" pointer-events="stroke" @onclick="() => HandleEdgeClick(edge)"
+                              @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" />
                     }
+                }
 
-                    @foreach (var edge in model.Edges)
+                @foreach (var vertex in model.Vertices)
+                {
+                    if (vertex.IsAvailableForAction)
                     {
-                        if (edge.OwnerPlayerId is not null)
-                        {
-                            <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)"
-                                  stroke="@GetRoadColor(edge.OwnerPlayerId)" stroke-width="9" stroke-linecap="round"
-                                  pointer-events="none" />
-                        }
-
-                        if (edge.IsAvailableForAction)
-                        {
-                            <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)" stroke="#22c55e"
-                                  stroke-opacity="0.55" stroke-width="16" stroke-linecap="round" class="edge-action"
-                                  style="cursor:pointer;" pointer-events="stroke" @onclick="() => HandleEdgeClick(edge)"
-                                  @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" />
-                        }
+                        <circle cx="@F(vertex.X)" cy="@F(vertex.Y)" r="18" fill="#86efac" fill-opacity="0.45" stroke="#16a34a"
+                                stroke-width="2" class="vertex-action" style="cursor:pointer;" pointer-events="all"
+                                @onclick="() => HandleVertexClick(vertex.VertexId)" @onclick:stopPropagation="true"
+                                @onmousedown:stopPropagation="true" />
                     }
-                </g>
-            </svg>
-        </div>
-    }
+                }
+
+                @foreach (var vertex in model.Vertices)
+                {
+                    if (IsVillage(vertex))
+                    {
+                        <g class="village-marker" transform="translate(@F(vertex.X),@F(vertex.Y))" pointer-events="none">
+                            <polygon points="-21,9 0,-18 21,9" fill="@GetVillageRoofColor(vertex.OwnerPlayerId)" stroke="#3f2b1d"
+                                     stroke-width="1.1" />
+                            <rect x="-18" y="9" width="36" height="24" rx="4.2" fill="@GetVillageBodyColor(vertex.OwnerPlayerId)"
+                                  stroke="#3f2b1d" stroke-width="1.1" />
+                            <rect x="-4.2" y="18" width="8.4" height="13.8" rx="2.4" fill="#fef3c7" fill-opacity="0.95" />
+                        </g>
+                    }
+                }
+            </g>
+        </svg>
+    </div>
+}
 
 @code {
     private double CanvasWidth;
@@ -152,7 +167,7 @@ else
     private double _containerW;
     private double _containerH;
 
-    // Actual display dimensions — measured value takes priority over parameter
+    // Actual display dimensions - measured value takes priority over parameter
     private double W => _containerW > 0 ? _containerW : DisplayWidth;
     private double H => _containerH > 0 ? _containerH : DisplayHeight;
 
@@ -168,9 +183,16 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
+        if (!firstRender)
+        {
+            return;
+        }
+
         var bounds = await JS.InvokeAsync<ElementBounds>("getElementBounds", _containerRef);
-        if (bounds.Width <= 0) return;
+        if (bounds.Width <= 0)
+        {
+            return;
+        }
 
         _containerW = bounds.Width;
         _containerH = bounds.Height;
@@ -188,7 +210,7 @@ else
         var ratio = newScale / _scale;
 
         // Keep the canvas point under the cursor fixed:
-        // canvasPoint = (OffsetX - _tx) / _scale → invariant after zoom
+        // canvasPoint = (OffsetX - _tx) / _scale -> invariant after zoom
         _tx = e.OffsetX - (e.OffsetX - _tx) * ratio;
         _ty = e.OffsetY - (e.OffsetY - _ty) * ratio;
         _scale = newScale;
@@ -197,7 +219,11 @@ else
 
     private void OnMouseDown(MouseEventArgs e)
     {
-        if (e.Button != 0) return;
+        if (e.Button != 0)
+        {
+            return;
+        }
+
         _isDragging = true;
         _dragStartX = e.ClientX;
         _dragStartY = e.ClientY;
@@ -207,14 +233,21 @@ else
 
     private void OnMouseMove(MouseEventArgs e)
     {
-        if (!_isDragging) return;
+        if (!_isDragging)
+        {
+            return;
+        }
+
         // Delta in CSS px maps 1:1 to SVG user units (no viewBox)
         _tx = _txStart + (e.ClientX - _dragStartX);
         _ty = _tyStart + (e.ClientY - _dragStartY);
         ClampPan();
     }
 
-    private void OnMouseUp(MouseEventArgs e) => _isDragging = false;
+    private void OnMouseUp(MouseEventArgs e)
+    {
+        _isDragging = false;
+    }
 
     private Task HandleVertexClick(int vertexId)
     {
@@ -236,7 +269,10 @@ else
         _ty = Math.Clamp(_ty, -(scaledH - margin), H - margin);
     }
 
-    private static string F(double v) => v.ToString("F4", CultureInfo.InvariantCulture);
+    private static string F(double v)
+    {
+        return v.ToString("F4", CultureInfo.InvariantCulture);
+    }
 
     private static int GetTokenPipCount(int numberToken)
     {

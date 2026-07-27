@@ -1,0 +1,1 @@
+dotnet build src/MeuCatan.Api/MeuCatan.Api.csproj

@@ -1,0 +1,1 @@
+dotnet build src/MeuCatan.MudblazorWasmClient/MeuCatan.MudblazorWasmClient.csproj

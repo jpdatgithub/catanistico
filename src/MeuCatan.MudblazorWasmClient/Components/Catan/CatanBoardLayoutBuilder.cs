@@ -141,13 +141,121 @@ public static class CatanBoardLayoutBuilder
             })
             .ToList();
 
+        var ports = BuildPorts(state);
+
         return new CatanBoardSvgModel
         {
             Width = state.width,
             Height = state.height,
             Tiles = tiles,
             Vertices = vertices,
-            Edges = edges
+            Edges = edges,
+            Ports = ports
+        };
+    }
+
+    private static List<CatanSvgPort> BuildPorts(CatanGameStateResponse state)
+    {
+        var result = new List<CatanSvgPort>();
+        var centerX = state.width / 2.0;
+        var centerY = state.height / 2.0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var verticesById = state.Vertices.ToDictionary(vertex => vertex.VertexId);
+
+        foreach (var edge in state.Edges)
+        {
+            if (!verticesById.TryGetValue(edge.smallerVertexId, out var vertexA)
+                || !verticesById.TryGetValue(edge.biggerVertexId, out var vertexB)
+                || vertexA.Ports.Count == 0
+                || vertexB.Ports.Count == 0)
+            {
+                continue;
+            }
+
+            var sharedPorts = vertexA.Ports
+                .Intersect(vertexB.Ports, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (sharedPorts.Count == 0)
+            {
+                continue;
+            }
+
+            foreach (var portCode in sharedPorts)
+            {
+                var uniqueKey = $"{edge.smallerVertexId}:{edge.biggerVertexId}:{portCode}";
+                if (!seen.Add(uniqueKey))
+                {
+                    continue;
+                }
+
+                var midpointX = (edge.PointA.X + edge.PointB.X) / 2.0;
+                var midpointY = (edge.PointA.Y + edge.PointB.Y) / 2.0;
+                var (normalX, normalY) = ComputeOutwardUnitNormal(edge.PointA, edge.PointB, midpointX, midpointY, centerX, centerY);
+
+                const double anchorOffset = 24;
+                const double labelOffset = 48;
+                var anchorX = midpointX + (normalX * anchorOffset);
+                var anchorY = midpointY + (normalY * anchorOffset);
+                var labelX = midpointX + (normalX * labelOffset);
+                var labelY = midpointY + (normalY * labelOffset);
+
+                result.Add(new CatanSvgPort
+                {
+                    PortCode = portCode,
+                    Label = ResolvePortLabel(portCode),
+                    AnchorX = anchorX,
+                    AnchorY = anchorY,
+                    X = labelX,
+                    Y = labelY
+                });
+            }
+        }
+
+        return result;
+    }
+
+    private static (double X, double Y) ComputeOutwardUnitNormal(
+        Point pointA,
+        Point pointB,
+        double midpointX,
+        double midpointY,
+        double centerX,
+        double centerY)
+    {
+        var dx = pointB.X - pointA.X;
+        var dy = pointB.Y - pointA.Y;
+        var normalAX = -dy;
+        var normalAY = dx;
+        var normalBX = dy;
+        var normalBY = -dx;
+
+        var toOutsideX = midpointX - centerX;
+        var toOutsideY = midpointY - centerY;
+        var dotA = (normalAX * toOutsideX) + (normalAY * toOutsideY);
+
+        var normalX = dotA >= 0 ? normalAX : normalBX;
+        var normalY = dotA >= 0 ? normalAY : normalBY;
+        var length = Math.Sqrt((normalX * normalX) + (normalY * normalY));
+        if (length <= 0.0001)
+        {
+            return (0, -1);
+        }
+
+        return (normalX / length, normalY / length);
+    }
+
+    private static string ResolvePortLabel(string portCode)
+    {
+        return portCode.ToLowerInvariant() switch
+        {
+            "generic_3to1" => "3:1",
+            "wood_2to1" => "WOOD 2:1",
+            "brick_2to1" => "BRICK 2:1",
+            "sheep_2to1" => "SHEEP 2:1",
+            "wheat_2to1" => "WHEAT 2:1",
+            "ore_2to1" => "ORE 2:1",
+            _ => portCode
         };
     }
 
@@ -204,6 +312,7 @@ public sealed class CatanBoardSvgModel
     public List<CatanSvgTile> Tiles { get; init; } = [];
     public List<CatanSvgVertex> Vertices { get; init; } = [];
     public List<CatanSvgEdge> Edges { get; init; } = [];
+    public List<CatanSvgPort> Ports { get; init; } = [];
 }
 
 public sealed class CatanSvgTile
@@ -237,4 +346,14 @@ public sealed class CatanSvgEdge
     public double Y2 { get; init; }
     public int? OwnerPlayerId { get; init; }
     public bool IsAvailableForAction { get; init; }
+}
+
+public sealed class CatanSvgPort
+{
+    public string PortCode { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public double AnchorX { get; init; }
+    public double AnchorY { get; init; }
+    public double X { get; init; }
+    public double Y { get; init; }
 }

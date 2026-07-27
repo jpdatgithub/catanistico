@@ -14,8 +14,19 @@ public sealed class CatanGameSessionState
     public int? LastPlacedSettlementVertexId { get; set; }
     public bool AwaitingInitialRoadPlacement { get; set; }
     public int? PendingInitialRoadFromVertexId { get; set; }
+    public bool HasRolledDiceThisTurn { get; set; }
+    public int? LastDice1 { get; set; }
+    public int? LastDice2 { get; set; }
+    public List<CatanResourceGainState> LastRollResourceGains { get; set; } = [];
     public List<CatanPlayerState> Players { get; set; } = [];
     public CatanBoardState Board { get; set; } = new();
+}
+
+public sealed class CatanResourceGainState
+{
+    public int UsuarioId { get; set; }
+    public string ResourceType { get; set; } = string.Empty;
+    public int Amount { get; set; }
 }
 
 public sealed class CatanPlayerState

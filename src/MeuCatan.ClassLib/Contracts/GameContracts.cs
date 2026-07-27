@@ -11,6 +11,8 @@ public static class GameActionTypes
 {
     public const string PlaceInitialSettlement = "place-initial-settlement";
     public const string PlaceInitialRoad = "place-initial-road";
+    public const string RollDice = "roll-dice";
+    public const string EndTurn = "end-turn";
 }
 
 public class GameSessionResponse
@@ -72,12 +74,25 @@ public class CatanGameStateResponse
     public int? LastPlacedSettlementVertexId { get; set; }
     public bool AwaitingInitialRoadPlacement { get; set; }
     public int? PendingInitialRoadFromVertexId { get; set; }
+    public bool HasRolledDiceThisTurn { get; set; }
+    public int? LastDice1 { get; set; }
+    public int? LastDice2 { get; set; }
+    public int? LastDiceTotal { get; set; }
+    public List<GameResourceGainResponse> LastRollResourceGains { get; set; } = [];
     public int? RobberTileId { get; set; }
     public List<CatanTileResponse> Tiles { get; set; } = [];
     public List<CatanVertexResponse> Vertices { get; set; } = [];
     public List<CatanEdgeResponse> Edges { get; set; } = [];
     public int width { get; set; }
     public int height { get; set; }
+}
+
+public class GameResourceGainResponse
+{
+    public int UsuarioId { get; set; }
+    public string PlayerNome { get; set; } = string.Empty;
+    public string ResourceType { get; set; } = string.Empty;
+    public int Amount { get; set; }
 }
 
 public class CatanTileResponse
