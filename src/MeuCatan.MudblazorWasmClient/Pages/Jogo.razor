@@ -21,7 +21,40 @@
     else
     {
         <MudGrid>
-            <MudItem xs="12" md="3">
+            <MudItem xs="12" md="8">
+                <MudPaper Class="pa-4">
+                    @* <MudText Typo="Typo.h5" Class="mb-2">Tabuleiro de Catan</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-4">
+                            Este primeiro corte já carrega uma sessão real e um board SVG do Catan. As ações interativas de
+                            colocação inicial entram no próximo passo.
+                        </MudText>
+
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            Quando o setup estiver no seu turno, clique no destaque verde para executar sua ação: vértice para
+                            aldeia e aresta para estrada.
+                        </MudText> *@
+
+                    @if (_session.CatanState is not null)
+                    {
+                        <CatanBoardSvg State="_session.CatanState" DisplayWidth="1080" DisplayHeight="720"
+                                       OnVertexClicked="ExecutarPosicionamentoInicialAsync"
+                                       OnEdgeClicked="ExecutarPosicionamentoEstradaInicialAsync" />
+                    }
+
+                    @{
+                        var currentPlayer = _session.Players.FirstOrDefault(player => player.UsuarioId ==
+            _session.YourPlayerId);
+                    }
+                    @if (currentPlayer is not null)
+                    {
+                        <div class="mt-4">
+                            <PlayerResourcePanel Player="currentPlayer" />
+                        </div>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
                 <MudStack Spacing="2">
                     <MudPaper Class="pa-4">
                         <MudText Typo="Typo.h6">Sessão</MudText>
@@ -56,46 +89,10 @@
                                         </MudStack>
                                     </MudListItem>
                                 }
+                                }
                             </MudList>
                         </MudPaper>
-                    </MudStack>
-                </MudItem>
 
-                <MudItem xs="12" md="6">
-                    <MudPaper Class="pa-4">
-                        @* <MudText Typo="Typo.h5" Class="mb-2">Tabuleiro de Catan</MudText>
-                        <MudText Typo="Typo.body2" Class="mb-4">
-                            Este primeiro corte já carrega uma sessão real e um board SVG do Catan. As ações interativas de
-                            colocação inicial entram no próximo passo.
-                        </MudText>
-
-                        <MudText Typo="Typo.body2" Class="mb-2">
-                            Quando o setup estiver no seu turno, clique no destaque verde para executar sua ação: vértice para
-                            aldeia e aresta para estrada.
-                        </MudText> *@
-
-                        @if (_session.CatanState is not null)
-                        {
-                            <CatanBoardSvg State="_session.CatanState" DisplayWidth="900" DisplayHeight="600"
-                                           OnVertexClicked="ExecutarPosicionamentoInicialAsync"
-                                           OnEdgeClicked="ExecutarPosicionamentoEstradaInicialAsync" />
-                        }
-
-                        @{
-                            var currentPlayer = _session.Players.FirstOrDefault(player => player.UsuarioId ==
-                _session.YourPlayerId);
-                        }
-                        @if (currentPlayer is not null)
-                        {
-                            <div class="mt-4">
-                                <PlayerResourcePanel Player="currentPlayer" />
-                            </div>
-                        }
-                    </MudPaper>
-                </MudItem>
-
-                <MudItem xs="12" md="3">
-                    <MudStack Spacing="2">
                         <GameChatPanel SalaId="@SalaId" />
 
                         @if (DebugStatePanelEnabled)
@@ -163,10 +160,7 @@
                                         <MudPaper Class="pa-4">
                                             <MudText Typo="Typo.h6">Turno</MudText>
 
-                                            <MudButton Variant="Variant.Filled"
-                                                       Color="Color.Primary"
-                                                       Class="mt-2"
-                                                       Disabled="@(!PodeRolarDados)"
+                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2" Disabled="@(!PodeRolarDados)"
                                                        OnClick="ExecutarRolagemDadosAsync">
                                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                                     <DiceFace Value="@(_session.CatanState.LastDice1 ?? 6)" Size="36" />
@@ -202,11 +196,8 @@
                                                 }
                                             }
 
-                                            <MudButton Variant="Variant.Outlined"
-                                                       Color="Color.Secondary"
-                                                       Class="mt-3"
-                                                       Disabled="@(!PodePassarTurno)"
-                                                       OnClick="ExecutarPassarTurnoAsync">
+                                            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Class="mt-3"
+                                                       Disabled="@(!PodePassarTurno)" OnClick="ExecutarPassarTurnoAsync">
                                                 Passar turno
                                             </MudButton>
                                         </MudPaper>
