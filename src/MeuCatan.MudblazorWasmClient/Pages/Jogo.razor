@@ -20,6 +20,8 @@
     }
     else
     {
+        var currentPlayer = _session.Players.FirstOrDefault(player => player.UsuarioId == _session.YourPlayerId);
+
         <MudGrid>
             <MudItem xs="12" md="8">
                 <MudPaper Class="pa-4">
@@ -34,21 +36,27 @@
                             aldeia e aresta para estrada.
                         </MudText> *@
 
-                    @if (_session.CatanState is not null)
-                    {
-                        <CatanBoardSvg State="_session.CatanState" DisplayWidth="1080" DisplayHeight="720"
-                                       OnVertexClicked="ExecutarPosicionamentoInicialAsync"
-                                       OnEdgeClicked="ExecutarPosicionamentoEstradaInicialAsync" />
-                    }
+                    <div style="position: relative;">
+                        @if (_session.CatanState is not null)
+                        {
+                            <CatanBoardSvg State="_session.CatanState" DisplayWidth="1080" DisplayHeight="720"
+                                           OnVertexClicked="ExecutarPosicionamentoInicialAsync"
+                                           OnEdgeClicked="ExecutarPosicionamentoEstradaInicialAsync" />
+                        }
 
-                    @{
-                        var currentPlayer = _session.Players.FirstOrDefault(player => player.UsuarioId ==
-            _session.YourPlayerId);
-                    }
+                        @if (currentPlayer is not null && _isTradeOpen)
+                        {
+                            <ResourceTradePanel Player="currentPlayer" IsOpen="true" SelectedResources="_selectedTradeResources"
+                                                OnClose="FecharInterfaceTrocaAsync" OnSelectedResourceClicked="RemoverRecursoDaTrocaAsync" />
+                        }
+                    </div>
+
                     @if (currentPlayer is not null)
                     {
-                        <div class="mt-4">
-                            <PlayerResourcePanel Player="currentPlayer" />
+                        <div>
+                            <PlayerResourcePanel Player="currentPlayer" SelectedResources="_selectedTradeResources"
+                                                 CanInteract="@PodeInteragirComRecursos"
+                                                 OnResourceClicked="AbrirOuAdicionarRecursoNaTrocaAsync" />
                         </div>
                     }
                 </MudPaper>
@@ -226,6 +234,8 @@
     private DateTime _pollingRapidoAteUtc;
     private string _sessionDebugJson = "null";
     private string _catanStateDebugJson = "null";
+    private bool _isTradeOpen;
+    private readonly Dictionary<string, int> _selectedTradeResources = new(StringComparer.OrdinalIgnoreCase);
     // Keep heavy state serialization opt-in even in development builds.
     private const bool EnableDebugStatePanelInDevelopment = false;
     private const int PollingNormalMs = 2000;
@@ -247,6 +257,13 @@ StringComparison.OrdinalIgnoreCase)
 
     private bool PodePassarTurno => !_carregando
         && _session?.AvailableActions.Contains(GameActionTypes.EndTurn) == true;
+
+    private bool PodeInteragirComRecursos => _session is not null
+        && !_carregando
+        && _session.Phase == GameTipoFase.Turno
+        && _session.CanCurrentUserAct
+        && _session.CatanState is not null
+        && _session.CatanState.HasRolledDiceThisTurn;
 
     protected override async Task OnInitializedAsync()
     {
@@ -276,6 +293,69 @@ StringComparison.OrdinalIgnoreCase)
 
         AtualizarSessionState(result.Data);
         HabilitarPollingRapidoTemporario();
+    }
+
+    private async Task AbrirOuAdicionarRecursoNaTrocaAsync(string resourceType)
+    {
+        if (!PodeInteragirComRecursos || _session is null)
+        {
+            return;
+        }
+
+        var currentPlayer = _session.Players.FirstOrDefault(player => player.UsuarioId == _session.YourPlayerId);
+        if (currentPlayer is null)
+        {
+            return;
+        }
+
+        _isTradeOpen = true;
+
+        var availableCount = currentPlayer.Resources.TryGetValue(resourceType, out var currentCount) ? currentCount : 0;
+        var selectedCount = _selectedTradeResources.TryGetValue(resourceType, out var existingSelected) ? existingSelected : 0;
+
+        if (selectedCount >= availableCount)
+        {
+            return;
+        }
+
+        _selectedTradeResources[resourceType] = selectedCount + 1;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task FecharInterfaceTrocaAsync()
+    {
+        _isTradeOpen = false;
+        _selectedTradeResources.Clear();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RemoverRecursoDaTrocaAsync(string resourceType)
+    {
+        if (string.IsNullOrWhiteSpace(resourceType))
+        {
+            return;
+        }
+
+        if (!_selectedTradeResources.TryGetValue(resourceType, out var selectedCount) || selectedCount <= 0)
+        {
+            return;
+        }
+
+        if (selectedCount == 1)
+        {
+            _selectedTradeResources.Remove(resourceType);
+        }
+        else
+        {
+            _selectedTradeResources[resourceType] = selectedCount - 1;
+        }
+
+        if (_selectedTradeResources.Count == 0)
+        {
+            _isTradeOpen = false;
+        }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task ExecutarPosicionamentoInicialAsync(int vertexId)
@@ -489,6 +569,16 @@ StringComparison.OrdinalIgnoreCase)
     private void AtualizarSessionState(GameSessionResponse session)
     {
         _session = session;
+
+        if (!_isTradeOpen)
+        {
+            _selectedTradeResources.Clear();
+        }
+
+        if (_isTradeOpen && _selectedTradeResources.Count == 0)
+        {
+            _isTradeOpen = false;
+        }
 
         if (DebugStatePanelEnabled)
         {

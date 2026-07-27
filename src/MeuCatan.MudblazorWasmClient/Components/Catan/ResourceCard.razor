@@ -1,19 +1,23 @@
-<div class="resource-card-shell">
-    @if (Count > 2)
-    {
-        <div class="resource-card-layer @ResourceClass layer-back"></div>
-    }
+<button type="button"
+        class="resource-card-button @(OnClick.HasDelegate ? "is-clickable" : string.Empty) @(Selected ? "is-selected" : string.Empty)"
+        disabled="@Disabled" @onclick="HandleClick">
+    <div class="resource-card-shell @(Compact ? "resource-card-shell--compact" : string.Empty)">
+        @if (Count > 2)
+        {
+            <div class="resource-card-layer @ResourceClass layer-back"></div>
+        }
 
-    @if (Count > 1)
-    {
-        <div class="resource-card-layer @ResourceClass layer-middle"></div>
-    }
+        @if (Count > 1)
+        {
+            <div class="resource-card-layer @ResourceClass layer-middle"></div>
+        }
 
-    <div class="resource-card @ResourceClass">
-        <span class="resource-name">@DisplayName</span>
-        <span class="resource-count">@Count</span>
+        <div class="resource-card @ResourceClass @(Compact ? "resource-card--compact" : string.Empty)">
+            <span class="resource-name">@DisplayName</span>
+            <span class="resource-count @(Compact ? "resource-count--compact" : string.Empty)">@Count</span>
+        </div>
     </div>
-</div>
+</button>
 
 @code {
     [Parameter, EditorRequired]
@@ -21,6 +25,18 @@
 
     [Parameter]
     public int Count { get; set; }
+
+    [Parameter]
+    public bool Compact { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public bool Selected { get; set; }
+
+    [Parameter]
+    public EventCallback OnClick { get; set; }
 
     private string ResourceClass => ResourceType.ToLowerInvariant() switch
     {
@@ -41,4 +57,14 @@
         "pedra" => "Pedra",
         _ => ResourceType
     };
+
+    private async Task HandleClick()
+    {
+        if (!OnClick.HasDelegate || Disabled)
+        {
+            return;
+        }
+
+        await OnClick.InvokeAsync();
+    }
 }

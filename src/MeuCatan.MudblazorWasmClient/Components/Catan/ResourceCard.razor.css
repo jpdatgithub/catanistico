@@ -1,7 +1,35 @@
+.resource-card-button {
+    appearance: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+}
+
+.resource-card-button.is-clickable {
+    cursor: pointer;
+}
+
+.resource-card-button:disabled {
+    cursor: default;
+}
+
+.resource-card-button.is-selected .resource-card {
+    outline: 2px solid rgba(239, 68, 68, 0.55);
+    outline-offset: 2px;
+}
+
 .resource-card-shell {
     position: relative;
-    width: 120px;
-    height: 156px;
+    width: 68px;
+    height: 88px;
+}
+
+.resource-card-shell--compact {
+    width: 52px;
+    height: 68px;
 }
 
 .resource-card-layer,
@@ -32,6 +60,10 @@
     box-shadow: 0 8px 14px rgba(0, 0, 0, 0.2);
 }
 
+.resource-card--compact {
+    padding: 8px;
+}
+
 .resource-name {
     font-weight: 700;
     font-size: 0.95rem;
@@ -52,6 +84,15 @@
     align-items: center;
     justify-content: center;
     padding: 0 8px;
+}
+
+.resource-count--compact {
+    top: 6px;
+    right: 6px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+    font-size: 0.78rem;
 }
 
 .resource-madeira {
@@ -86,9 +127,14 @@
 
 @media (max-width: 960px) {
     .resource-card-shell {
-        width: 102px;
-        height: 136px;
+        width: 58px;
+        height: 76px;
         flex: 0 0 auto;
+    }
+
+    .resource-card-shell--compact {
+        width: 46px;
+        height: 60px;
     }
 
     .resource-name {

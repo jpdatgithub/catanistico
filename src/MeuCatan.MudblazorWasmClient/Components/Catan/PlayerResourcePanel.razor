@@ -1,5 +1,5 @@
 <MudPaper Class="resource-panel pa-4">
-    <MudText Typo="Typo.h6" Class="mb-2">Sua mão de recursos</MudText>
+    @* <MudText Typo="Typo.h6" Class="mb-2">Sua mão de recursos</MudText> *@
 
     @if (_visibleResources.Count == 0)
     {
@@ -10,7 +10,8 @@
         <div class="resource-hand-row">
             @foreach (var resource in _visibleResources)
             {
-                <ResourceCard ResourceType="@resource.Key" Count="@resource.Value" />
+                <ResourceCard ResourceType="@resource.Key" Count="@resource.Value" Disabled="@(!CanInteract)"
+                              OnClick="@(() => HandleResourceClick(resource.Key))" />
             }
         </div>
     }
@@ -29,6 +30,15 @@
     [Parameter, EditorRequired]
     public GamePlayerStateResponse Player { get; set; } = default!;
 
+    [Parameter]
+    public IReadOnlyDictionary<string, int> SelectedResources { get; set; } = new Dictionary<string, int>();
+
+    [Parameter]
+    public bool CanInteract { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnResourceClicked { get; set; }
+
     private List<KeyValuePair<string, int>> _visibleResources = [];
 
     protected override void OnParametersSet()
@@ -36,6 +46,8 @@
         var resources = Player.Resources ?? [];
 
         _visibleResources = resources
+            .Select(pair => new KeyValuePair<string, int>(pair.Key, Math.Max(0, pair.Value -
+SelectedResources.GetValueOrDefault(pair.Key))))
             .Where(pair => pair.Value > 0)
             .OrderBy(pair =>
             {
@@ -44,5 +56,15 @@
             })
             .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private async Task HandleResourceClick(string resourceType)
+    {
+        if (!CanInteract || !OnResourceClicked.HasDelegate)
+        {
+            return;
+        }
+
+        await OnResourceClicked.InvokeAsync(resourceType);
     }
 }

@@ -1,0 +1,117 @@
+<div class="resource-trade-overlay">
+    <MudPaper Class="resource-trade-panel pa-3" Elevation="6">
+        <MudStack Spacing="2">
+            @if (IsOpen)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Style="color:#dc2626;" Class="trade-arrow" />
+
+                        <MudAvatar Size="Size.Small" Class="trade-avatar"
+                                   Style="@($"background-color:{AvatarColor}; color:#fff;")">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" />
+                        </MudAvatar>
+
+                        <MudText Typo="Typo.subtitle2">Troca em andamento</MudText>
+                    </MudStack>
+
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Variant="Variant.Text"
+                                   Color="Color.Default" aria-label="Fechar interface de trocas" OnClick="HandleClose" />
+                </MudStack>
+
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.caption">Selecionados</MudText>
+
+                    @if (SelectedResourceEntries.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2">Clique em uma carta para movê-la para a troca.</MudText>
+                    }
+                    else
+                    {
+                        <div class="trade-resource-row trade-resource-row--selected">
+                            @foreach (var resource in SelectedResourceEntries)
+                            {
+                                <ResourceCard ResourceType="@resource.Key" Count="@resource.Value"
+                                              OnClick="@(() => HandleSelectedResourceClick(resource.Key))" />
+                            }
+                        </div>
+
+                        <MudText Typo="Typo.caption">Clique em uma carta selecionada para devolvê-la à sua mão.</MudText>
+                    }
+                </MudStack>
+            }
+        </MudStack>
+    </MudPaper>
+</div>
+
+@code {
+    private static readonly string[] ResourceOrder =
+    [
+        "madeira",
+        "argila",
+        "ovelha",
+        "trigo",
+        "pedra"
+    ];
+
+    [Parameter, EditorRequired]
+    public GamePlayerStateResponse Player { get; set; } = default!;
+
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public IReadOnlyDictionary<string, int> SelectedResources { get; set; } = new Dictionary<string, int>();
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnSelectedResourceClicked { get; set; }
+
+    private string AvatarColor => Player.Cor.ToLowerInvariant() switch
+    {
+        "vermelho" => "#dc2626",
+        "azul" => "#2563eb",
+        "branco" => "#e2e8f0",
+        "laranja" => "#f97316",
+        _ => "#475569"
+    };
+
+    private List<KeyValuePair<string, int>> SelectedResourceEntries => BuildResourceEntries(SelectedResources);
+
+    private async Task HandleClose()
+    {
+        if (!OnClose.HasDelegate)
+        {
+            return;
+        }
+
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task HandleSelectedResourceClick(string resourceType)
+    {
+        if (!OnSelectedResourceClicked.HasDelegate)
+        {
+            return;
+        }
+
+        await OnSelectedResourceClicked.InvokeAsync(resourceType);
+    }
+
+    private static List<KeyValuePair<string, int>> BuildResourceEntries(IReadOnlyDictionary<string, int>? resources)
+    {
+        var source = resources ?? new Dictionary<string, int>();
+
+        return source
+            .Where(pair => pair.Value > 0)
+            .OrderBy(pair =>
+            {
+                var index = Array.IndexOf(ResourceOrder, pair.Key);
+                return index >= 0 ? index : int.MaxValue;
+            })
+            .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+}
