@@ -23,6 +23,7 @@ public sealed class CatanGameSessionService : IGameSessionService
     private const string SettlementBuildingType = "aldeia";
     private const double HexRadius = 100.0;
     private const double VertexAdjacencyTolerance = 1.0;
+    private static readonly TimeSpan TradeOfferLifetime = TimeSpan.FromSeconds(10);
 
     private static readonly (int X, int Y, int Z)[] OrderedOuterCoordinates =
     [
@@ -100,7 +101,7 @@ public sealed class CatanGameSessionService : IGameSessionService
 
     public LobbyOperationResult<GameSessionResponse> GetSession(int salaId, int usuarioId)
     {
-        return _sessionStore.Read(store =>
+        return _sessionStore.Write(store =>
         {
             var session = store.GetSessionOrDefault(salaId);
             if (session is null)
@@ -113,6 +114,10 @@ public sealed class CatanGameSessionService : IGameSessionService
                 return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não participa desta sessão.");
             }
 
+            if (RemoveExpiredTradeOffers(session, DateTime.UtcNow))
+            {
+                store.Save(session);
+            }
             return LobbyOperationResult<GameSessionResponse>.Ok(ToResponse(session, usuarioId));
         });
     }
@@ -137,6 +142,8 @@ public sealed class CatanGameSessionService : IGameSessionService
             {
                 return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não participa desta sessão.");
             }
+
+            RemoveExpiredTradeOffers(session, DateTime.UtcNow);
 
             if (session.CurrentPlayerId != usuarioId)
             {
@@ -193,6 +200,19 @@ public sealed class CatanGameSessionService : IGameSessionService
                 if (endTurnResult is not null)
                 {
                     return endTurnResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.OfferTrade, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno || !session.HasRolledDiceThisTurn)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode oferecer trocas após rolar os dados.");
+                }
+
+                var offerTradeResult = TryOfferTrade(session, actingPlayer, request);
+                if (offerTradeResult is not null)
+                {
+                    return offerTradeResult;
                 }
             }
             else
@@ -361,6 +381,58 @@ public sealed class CatanGameSessionService : IGameSessionService
         session.HasRolledDiceThisTurn = false;
 
         return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryOfferTrade(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        GameActionRequest request)
+    {
+        var offeredResources = NormalizeTradeResources(request.OfferedResources);
+        var askedResources = NormalizeTradeResources(request.AskedResources);
+
+        if (offeredResources.Count == 0 || askedResources.Count == 0)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("A troca precisa ter recursos oferecidos e pedidos.");
+        }
+
+        foreach (var offeredResource in offeredResources)
+        {
+            var availableAmount = actingPlayer.Resources.GetValueOrDefault(offeredResource.Key);
+            if (offeredResource.Value > availableAmount)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui recursos suficientes para essa oferta.");
+            }
+        }
+
+        var createdAtUtc = DateTime.UtcNow;
+        session.ActiveTradeOffers.Add(new CatanTradeOfferState
+        {
+            OfferId = session.NextTradeOfferId++,
+            OffererPlayerId = actingPlayer.UsuarioId,
+            OfferedResources = offeredResources,
+            AskedResources = askedResources,
+            CreatedAtUtc = createdAtUtc,
+            ExpiresAtUtc = createdAtUtc.Add(TradeOfferLifetime)
+        });
+
+        return null;
+    }
+
+    private static Dictionary<string, int> NormalizeTradeResources(IReadOnlyDictionary<string, int>? resources)
+    {
+        return (resources ?? new Dictionary<string, int>())
+            .Where(resource => !string.IsNullOrWhiteSpace(resource.Key) && resource.Value > 0)
+            .GroupBy(resource => resource.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Sum(resource => resource.Value),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool RemoveExpiredTradeOffers(CatanGameSessionState session, DateTime nowUtc)
+    {
+        return session.ActiveTradeOffers.RemoveAll(offer => offer.ExpiresAtUtc <= nowUtc) > 0;
     }
 
     private static void DistributeResourcesForRoll(CatanGameSessionState session, int rolledTotal)
@@ -770,6 +842,20 @@ public sealed class CatanGameSessionService : IGameSessionService
                     })
                     .ToList(),
                 RobberTileId = session.Board.RobberTileId,
+                ActiveTradeOffers = session.ActiveTradeOffers
+                    .OrderByDescending(offer => offer.CreatedAtUtc)
+                    .Select(offer => new TradeOfferResponse
+                    {
+                        OfferId = offer.OfferId,
+                        OffererPlayerId = offer.OffererPlayerId,
+                        OffererName = session.Players.FirstOrDefault(player => player.UsuarioId == offer.OffererPlayerId)?.Nome ?? string.Empty,
+                        OffererColor = session.Players.FirstOrDefault(player => player.UsuarioId == offer.OffererPlayerId)?.Cor ?? string.Empty,
+                        OfferedResources = new Dictionary<string, int>(offer.OfferedResources, StringComparer.OrdinalIgnoreCase),
+                        AskedResources = new Dictionary<string, int>(offer.AskedResources, StringComparer.OrdinalIgnoreCase),
+                        CreatedAtUtc = offer.CreatedAtUtc,
+                        ExpiresAtUtc = offer.ExpiresAtUtc
+                    })
+                    .ToList(),
                 width = session.Board.width,
                 height = session.Board.height,
                 Tiles = session.Board.Tiles

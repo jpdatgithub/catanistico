@@ -13,6 +13,10 @@ public static class GameActionTypes
     public const string PlaceInitialRoad = "place-initial-road";
     public const string RollDice = "roll-dice";
     public const string EndTurn = "end-turn";
+    public const string OfferTrade = "offer-trade";
+    public const string AcceptTrade = "accept-trade";
+    public const string DeclineTrade = "decline-trade";
+    public const string EditTrade = "edit-trade";
 }
 
 public class GameSessionResponse
@@ -49,6 +53,20 @@ public class GameActionRequest
     public int? EdgeId { get; set; }
     public int? SmallerVertexId { get; set; }
     public int? BiggerVertexId { get; set; }
+    public Dictionary<string, int> OfferedResources { get; set; } = [];
+    public Dictionary<string, int> AskedResources { get; set; } = [];
+}
+
+public class TradeOfferResponse
+{
+    public long OfferId { get; set; }
+    public int OffererPlayerId { get; set; }
+    public string OffererName { get; set; } = string.Empty;
+    public string OffererColor { get; set; } = string.Empty;
+    public Dictionary<string, int> OfferedResources { get; set; } = [];
+    public Dictionary<string, int> AskedResources { get; set; } = [];
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime ExpiresAtUtc { get; set; }
 }
 
 public class GameActionResult
@@ -80,6 +98,7 @@ public class CatanGameStateResponse
     public int? LastDiceTotal { get; set; }
     public List<GameResourceGainResponse> LastRollResourceGains { get; set; } = [];
     public int? RobberTileId { get; set; }
+    public List<TradeOfferResponse> ActiveTradeOffers { get; set; } = [];
     public List<CatanTileResponse> Tiles { get; set; } = [];
     public List<CatanVertexResponse> Vertices { get; set; } = [];
     public List<CatanEdgeResponse> Edges { get; set; } = [];

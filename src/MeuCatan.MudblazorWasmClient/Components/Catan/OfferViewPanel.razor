@@ -1,0 +1,75 @@
+<MudPaper Class="offer-view-panel pa-3" Elevation="6">
+    <MudStack Spacing="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudAvatar Size="Size.Small" Class="offer-avatar" Style="@($"background-color:{AvatarColor}; color:#fff;")">
+                <MudIcon Icon="@Icons.Material.Filled.Person" />
+            </MudAvatar>
+            <MudText Typo="Typo.subtitle2">@Offer.OffererName ofereceu uma troca</MudText>
+        </MudStack>
+
+        <div class="offer-resource-section">
+            <MudText Typo="Typo.caption">Oferece</MudText>
+            <div class="offer-resource-row">
+                @foreach (var resource in OfferedResourceEntries)
+                {
+                    <ResourceCard ResourceType="@resource.Key" Count="@resource.Value" Disabled="true" />
+                }
+            </div>
+        </div>
+
+        <div class="offer-resource-section">
+            <MudText Typo="Typo.caption">Pede</MudText>
+            <div class="offer-resource-row">
+                @foreach (var resource in AskedResourceEntries)
+                {
+                    <ResourceCard ResourceType="@resource.Key" Count="@resource.Value" Disabled="true" />
+                }
+            </div>
+        </div>
+
+        <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">Recusar</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Secondary">Editar</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary">Aceitar</MudButton>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private static readonly string[] ResourceOrder =
+    [
+        "madeira",
+        "argila",
+        "ovelha",
+        "trigo",
+        "pedra"
+    ];
+
+    [Parameter, EditorRequired]
+    public TradeOfferResponse Offer { get; set; } = default!;
+
+    private string AvatarColor => Offer.OffererColor.ToLowerInvariant() switch
+    {
+        "vermelho" => "#dc2626",
+        "azul" => "#2563eb",
+        "branco" => "#e2e8f0",
+        "laranja" => "#f97316",
+        _ => "#475569"
+    };
+
+    private List<KeyValuePair<string, int>> OfferedResourceEntries => BuildResourceEntries(Offer.OfferedResources);
+    private List<KeyValuePair<string, int>> AskedResourceEntries => BuildResourceEntries(Offer.AskedResources);
+
+    private static List<KeyValuePair<string, int>> BuildResourceEntries(IReadOnlyDictionary<string, int> resources)
+    {
+        return resources
+            .Where(pair => pair.Value > 0)
+            .OrderBy(pair =>
+            {
+                var index = Array.IndexOf(ResourceOrder, pair.Key);
+                return index >= 0 ? index : int.MaxValue;
+            })
+            .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+}

@@ -48,8 +48,11 @@
                         {
                             <ResourceTradePanel Player="currentPlayer" IsOpen="true" OfferedResources="_selectedTradeResources"
                                                 AskedResources="_askedTradeResources" OnClose="FecharInterfaceTrocaAsync"
-                                                OnSelectedResourceClicked="RemoverRecursoDaTrocaAsync" />
+                                                OnSelectedResourceClicked="RemoverRecursoDaTrocaAsync"
+                                                OnOffer="ExecutarOfertaTrocaAsync" />
                         }
+
+                        <OfferViewPanelStack Offers="OfertasAtivas" />
                     </div>
 
                     @if (currentPlayer is not null)
@@ -231,6 +234,7 @@
     private bool _carregando;
     private CancellationTokenSource? _pollingCancellation;
     private Task? _pollingTask;
+    private Task? _offerExpiryTask;
     private HubConnection? _stateHubConnection;
     private DateTime _pollingRapidoAteUtc;
     private string _sessionDebugJson = "null";
@@ -267,6 +271,10 @@ StringComparison.OrdinalIgnoreCase)
         && _session.CatanState is not null
         && _session.CatanState.HasRolledDiceThisTurn;
 
+    private IReadOnlyList<TradeOfferResponse> OfertasAtivas => _session?.CatanState?.ActiveTradeOffers
+        .Where(offer => offer.ExpiresAtUtc > DateTime.UtcNow)
+        .ToList() ?? [];
+
     protected override async Task OnInitializedAsync()
     {
         HabilitarPollingRapidoTemporario();
@@ -276,6 +284,7 @@ StringComparison.OrdinalIgnoreCase)
 
         _pollingCancellation = new CancellationTokenSource();
         _pollingTask = IniciarPollingAsync(_pollingCancellation.Token);
+        _offerExpiryTask = AtualizarExpiracaoOfertasAsync(_pollingCancellation.Token);
     }
 
     private async Task AtualizarSessaoAsync()
@@ -358,6 +367,37 @@ StringComparison.OrdinalIgnoreCase)
         }
 
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ExecutarOfertaTrocaAsync()
+    {
+        if (!PodeInteragirComRecursos || _session is null || _carregando
+            || _selectedTradeResources.Count == 0 || _askedTradeResources.Count == 0)
+        {
+            return;
+        }
+
+        _acaoErro = null;
+        _carregando = true;
+
+        var result = await AuthService.ExecutarAcaoJogoAsync(SalaId, new GameActionRequest
+        {
+            ActionType = GameActionTypes.OfferTrade,
+            OfferedResources = new Dictionary<string, int>(_selectedTradeResources, StringComparer.OrdinalIgnoreCase),
+            AskedResources = new Dictionary<string, int>(_askedTradeResources, StringComparer.OrdinalIgnoreCase)
+        });
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _acaoErro = result.ErrorMessage ?? "Não foi possível oferecer a troca.";
+            return;
+        }
+
+        AtualizarSessionState(result.Data);
+        await FecharInterfaceTrocaAsync();
+        HabilitarPollingRapidoTemporario();
     }
 
     private async Task ExecutarPosicionamentoInicialAsync(int vertexId)
@@ -478,6 +518,21 @@ StringComparison.OrdinalIgnoreCase)
         }
     }
 
+    private async Task AtualizarExpiracaoOfertasAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
     private async Task InicializarAtualizacaoTempoRealAsync()
     {
         var token = await AuthService.EnsureSessionAsync();
@@ -539,6 +594,11 @@ StringComparison.OrdinalIgnoreCase)
         if (_pollingTask is not null)
         {
             await _pollingTask;
+        }
+
+        if (_offerExpiryTask is not null)
+        {
+            await _offerExpiryTask;
         }
 
         if (_stateHubConnection is not null)

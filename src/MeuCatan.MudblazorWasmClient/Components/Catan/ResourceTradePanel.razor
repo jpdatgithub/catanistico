@@ -77,6 +77,10 @@
                             </div>
                         }
                     </MudStack>
+
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!CanOffer)" OnClick="HandleOffer">
+                        Oferecer troca
+                    </MudButton>
                 </MudStack>
             }
         </MudStack>
@@ -111,6 +115,9 @@
     [Parameter]
     public EventCallback<string> OnSelectedResourceClicked { get; set; }
 
+    [Parameter]
+    public EventCallback OnOffer { get; set; }
+
     private string AvatarColor => Player.Cor.ToLowerInvariant() switch
     {
         "vermelho" => "#dc2626",
@@ -122,6 +129,7 @@
 
     private List<KeyValuePair<string, int>> AskedResourceEntries => BuildResourceEntries(AskedResources);
     private List<KeyValuePair<string, int>> OfferedResourceEntries => BuildResourceEntries(OfferedResources);
+    private bool CanOffer => OfferedResourceEntries.Count > 0 && AskedResourceEntries.Count > 0 && OnOffer.HasDelegate;
 
     private async Task HandleClose()
     {
@@ -141,6 +149,16 @@
         }
 
         await OnSelectedResourceClicked.InvokeAsync(resourceType);
+    }
+
+    private async Task HandleOffer()
+    {
+        if (!CanOffer)
+        {
+            return;
+        }
+
+        await OnOffer.InvokeAsync();
     }
 
     private static List<KeyValuePair<string, int>> BuildResourceEntries(IReadOnlyDictionary<string, int>? resources)

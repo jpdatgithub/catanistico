@@ -1,0 +1,14 @@
+@if (Offers.Count > 0)
+{
+    <div class="offer-view-stack" aria-label="Ofertas de troca ativas">
+        @foreach (var offer in Offers)
+        {
+            <OfferViewPanel @key="offer.OfferId" Offer="offer" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public IReadOnlyList<TradeOfferResponse> Offers { get; set; } = [];
+}

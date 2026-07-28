@@ -18,8 +18,20 @@ public sealed class CatanGameSessionState
     public int? LastDice1 { get; set; }
     public int? LastDice2 { get; set; }
     public List<CatanResourceGainState> LastRollResourceGains { get; set; } = [];
+    public long NextTradeOfferId { get; set; } = 1;
+    public List<CatanTradeOfferState> ActiveTradeOffers { get; set; } = [];
     public List<CatanPlayerState> Players { get; set; } = [];
     public CatanBoardState Board { get; set; } = new();
+}
+
+public sealed class CatanTradeOfferState
+{
+    public long OfferId { get; set; }
+    public int OffererPlayerId { get; set; }
+    public Dictionary<string, int> OfferedResources { get; set; } = [];
+    public Dictionary<string, int> AskedResources { get; set; } = [];
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime ExpiresAtUtc { get; set; }
 }
 
 public sealed class CatanResourceGainState

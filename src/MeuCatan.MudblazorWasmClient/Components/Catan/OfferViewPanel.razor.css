@@ -1,0 +1,31 @@
+.offer-view-panel {
+    border: 1px solid rgba(37, 99, 235, 0.24);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.90) 0%, rgba(239, 246, 255, 0.88) 100%);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(6px);
+    border-radius: 8px;
+}
+
+.offer-avatar {
+    width: 28px;
+    height: 28px;
+}
+
+.offer-resource-section {
+    display: grid;
+    gap: 4px;
+}
+
+.offer-resource-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+@media (max-width: 960px) {
+    .offer-resource-row {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+}
