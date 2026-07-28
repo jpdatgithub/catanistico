@@ -46,8 +46,9 @@
 
                         @if (currentPlayer is not null && _isTradeOpen)
                         {
-                            <ResourceTradePanel Player="currentPlayer" IsOpen="true" SelectedResources="_selectedTradeResources"
-                                                OnClose="FecharInterfaceTrocaAsync" OnSelectedResourceClicked="RemoverRecursoDaTrocaAsync" />
+                            <ResourceTradePanel Player="currentPlayer" IsOpen="true" OfferedResources="_selectedTradeResources"
+                                                AskedResources="_askedTradeResources" OnClose="FecharInterfaceTrocaAsync"
+                                                OnSelectedResourceClicked="RemoverRecursoDaTrocaAsync" />
                         }
                     </div>
 
@@ -236,6 +237,7 @@
     private string _catanStateDebugJson = "null";
     private bool _isTradeOpen;
     private readonly Dictionary<string, int> _selectedTradeResources = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _askedTradeResources = new(StringComparer.OrdinalIgnoreCase);
     // Keep heavy state serialization opt-in even in development builds.
     private const bool EnableDebugStatePanelInDevelopment = false;
     private const int PollingNormalMs = 2000;
@@ -302,13 +304,16 @@ StringComparison.OrdinalIgnoreCase)
             return;
         }
 
+        if (_askedTradeResources.ContainsKey(resourceType))
+        {
+            return;
+        }
+
         var currentPlayer = _session.Players.FirstOrDefault(player => player.UsuarioId == _session.YourPlayerId);
         if (currentPlayer is null)
         {
             return;
         }
-
-        _isTradeOpen = true;
 
         var availableCount = currentPlayer.Resources.TryGetValue(resourceType, out var currentCount) ? currentCount : 0;
         var selectedCount = _selectedTradeResources.TryGetValue(resourceType, out var existingSelected) ? existingSelected : 0;
@@ -318,6 +323,7 @@ StringComparison.OrdinalIgnoreCase)
             return;
         }
 
+        _isTradeOpen = true;
         _selectedTradeResources[resourceType] = selectedCount + 1;
         await InvokeAsync(StateHasChanged);
     }
@@ -326,6 +332,7 @@ StringComparison.OrdinalIgnoreCase)
     {
         _isTradeOpen = false;
         _selectedTradeResources.Clear();
+        _askedTradeResources.Clear();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -348,11 +355,6 @@ StringComparison.OrdinalIgnoreCase)
         else
         {
             _selectedTradeResources[resourceType] = selectedCount - 1;
-        }
-
-        if (_selectedTradeResources.Count == 0)
-        {
-            _isTradeOpen = false;
         }
 
         await InvokeAsync(StateHasChanged);
@@ -573,11 +575,7 @@ StringComparison.OrdinalIgnoreCase)
         if (!_isTradeOpen)
         {
             _selectedTradeResources.Clear();
-        }
-
-        if (_isTradeOpen && _selectedTradeResources.Count == 0)
-        {
-            _isTradeOpen = false;
+            _askedTradeResources.Clear();
         }
 
         if (DebugStatePanelEnabled)

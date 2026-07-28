@@ -14,7 +14,10 @@
 
         <div class="resource-card @ResourceClass @(Compact ? "resource-card--compact" : string.Empty)">
             <span class="resource-name">@DisplayName</span>
-            <span class="resource-count @(Compact ? "resource-count--compact" : string.Empty)">@Count</span>
+            @if (Count > 0)
+            {
+                <span class="resource-count @(Compact ? "resource-count--compact" : string.Empty)">@Count</span>
+            }
         </div>
     </div>
 </button>

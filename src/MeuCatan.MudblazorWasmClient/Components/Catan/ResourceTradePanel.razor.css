@@ -35,6 +35,13 @@
     margin-top: 2px;
 }
 
+.trade-empty-slot {
+    min-height: 88px;
+    display: flex;
+    align-items: center;
+    margin-top: 2px;
+}
+
 @media (max-width: 960px) {
     .resource-trade-overlay {
         width: calc(100% - 32px);
@@ -44,5 +51,9 @@
         flex-wrap: nowrap;
         overflow-x: auto;
         padding-bottom: 4px;
+    }
+
+    .trade-empty-slot {
+        min-height: 76px;
     }
 }
