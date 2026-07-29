@@ -1,48 +1,51 @@
-<MudPaper Class="offer-view-panel pa-3" Elevation="6">
-    <MudStack Spacing="2">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <MudAvatar Size="Size.Small" Class="offer-avatar" Style="@($"background-color:{AvatarColor}; color:#fff;")">
-                <MudIcon Icon="@Icons.Material.Filled.Person" />
-            </MudAvatar>
-            <MudText Typo="Typo.subtitle2">@Offer.OffererName ofereceu uma troca</MudText>
-        </MudStack>
+<div class="offer-view-panel-host">
+    <MudPaper Class="offer-view-panel pa-3" Elevation="6">
+        <MudStack Spacing="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudAvatar Size="Size.Small" Class="offer-avatar"
+                           Style="@($"background-color:{AvatarColor}; color:#fff;")">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" />
+                </MudAvatar>
+                <MudText Typo="Typo.subtitle2">@Offer.OffererName ofereceu uma troca</MudText>
+            </MudStack>
 
-        <div class="offer-resource-section">
-            <MudText Typo="Typo.caption">Oferece</MudText>
-            <div class="offer-resource-row">
-                @foreach (var resource in OfferedResourceEntries)
-                {
-                    <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value" Disabled="true" />
-                }
+            <div class="offer-resource-section">
+                <MudText Typo="Typo.caption">Oferece</MudText>
+                <div class="offer-resource-row">
+                    @foreach (var resource in OfferedResourceEntries)
+                    {
+                        <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value" Disabled="true" />
+                    }
+                </div>
             </div>
-        </div>
 
-        <div class="offer-resource-section">
-            <MudText Typo="Typo.caption">Pede</MudText>
-            <div class="offer-resource-row">
-                @foreach (var resource in AskedResourceEntries)
-                {
-                    <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value" Disabled="true" />
-                }
+            <div class="offer-resource-section">
+                <MudText Typo="Typo.caption">Pede</MudText>
+                <div class="offer-resource-row">
+                    @foreach (var resource in AskedResourceEntries)
+                    {
+                        <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value" Disabled="true" />
+                    }
+                </div>
             </div>
-        </div>
 
-        <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
-            <MudTooltip Text="Recusar">
-                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Variant="Variant.Outlined"
-                               Color="Color.Default" aria-label="Recusar" />
-            </MudTooltip>
-            <MudTooltip Text="Editar">
-                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Variant="Variant.Outlined"
-                               Color="Color.Secondary" aria-label="Editar" />
-            </MudTooltip>
-            <MudTooltip Text="Aceitar">
-                <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Variant="Variant.Filled"
-                               Color="Color.Primary" aria-label="Aceitar" />
-            </MudTooltip>
+            <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                <MudTooltip Text="Recusar">
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Variant="Variant.Outlined"
+                                   Color="Color.Default" aria-label="Recusar" />
+                </MudTooltip>
+                <MudTooltip Text="Editar">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Variant="Variant.Outlined"
+                                   Color="Color.Secondary" aria-label="Editar" />
+                </MudTooltip>
+                <MudTooltip Text="Aceitar">
+                    <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Variant="Variant.Filled"
+                                   Color="Color.Primary" aria-label="Aceitar" />
+                </MudTooltip>
+            </MudStack>
         </MudStack>
-    </MudStack>
-</MudPaper>
+    </MudPaper>
+</div>
 
 @code {
     private static readonly string[] ResourceOrder =
