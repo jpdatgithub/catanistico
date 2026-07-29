@@ -60,9 +60,28 @@
                         @if (currentPlayer is not null)
                         {
                             <div class="game-resource-bar">
-                                <PlayerResourcePanel Player="currentPlayer" SelectedResources="_selectedTradeResources"
-                                                     CanInteract="@PodeInteragirComRecursos"
-                                                     OnResourceClicked="AbrirOuAdicionarRecursoNaTrocaAsync" />
+                                <div class="game-resource-bar-contents">
+                                    <PlayerResourcePanel Player="currentPlayer" SelectedResources="_selectedTradeResources"
+                                                         CanInteract="@PodeInteragirComRecursos"
+                                                         OnResourceClicked="AbrirOuAdicionarRecursoNaTrocaAsync" />
+
+                                    @if (_session.Phase == GameTipoFase.Turno && _session.CatanState is not null)
+                                    {
+                                        <MudStack Row="true" Spacing="1" Class="resource-actions">
+                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="dice-action-button"
+                                                       Disabled="@(!PodeRolarDados)" OnClick="ExecutarRolagemDadosAsync">
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                    <DiceFace Value="@(_session.CatanState.LastDice1 ?? 6)" Size="36" />
+                                                    <DiceFace Value="@(_session.CatanState.LastDice2 ?? 6)" Size="36" />
+                                                </MudStack>
+                                            </MudButton>
+
+                                            <MudIconButton Icon="@Icons.Material.Filled.SkipNext" Color="Color.Secondary"
+                                                           Disabled="@(!PodePassarTurno)" OnClick="ExecutarPassarTurnoAsync"
+                                                           aria-label="Passar turno" />
+                                        </MudStack>
+                                    }
+                                </div>
                             </div>
                         }
                     </MudPaper>
@@ -107,58 +126,70 @@
                                 </MudList>
                             </MudPaper>
 
-                            <GameChatPanel SalaId="@SalaId" />
-                            @if (_session.Phase == GameTipoFase.Turno && _session.CatanState is not null)
-                            {
-                                <MudPaper Class="pa-4">
-                                    <MudText Typo="Typo.h6">Turno</MudText>
+                            <MudPaper Class="pa-4">
+                                <MudText Typo="Typo.h6">Histórico do jogo</MudText>
 
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2"
-                                               Disabled="@(!PodeRolarDados)" OnClick="ExecutarRolagemDadosAsync">
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <DiceFace Value="@(_session.CatanState.LastDice1 ?? 6)" Size="36" />
-                                            <DiceFace Value="@(_session.CatanState.LastDice2 ?? 6)" Size="36" />
-                                            <MudText Typo="Typo.button" Class="ml-1">Rolar dados</MudText>
-                                        </MudStack>
-                                    </MudButton>
-
-                                    @if (_session.CatanState.LastDiceTotal is not null)
-                                    {
-                                        <MudText Typo="Typo.body1" Class="mt-2">
-                                            Último resultado: @_session.CatanState.LastDice1 + @_session.CatanState.LastDice2 =
-                                            <b>@_session.CatanState.LastDiceTotal</b>
-                                        </MudText>
-
-                                        @if (_session.CatanState.HasRolledDiceThisTurn)
+                                @if (_session.CatanState?.RollHistory.Count == 0)
+                                {
+                                    <MudText Typo="Typo.body2" Class="mt-2">Ainda não houve rodadas registradas.</MudText>
+                                }
+                                else
+                                {
+                                    <div class="mt-2 history-chat-list">
+                                        @foreach (var entrada in Enumerable.Reverse(_session.CatanState!.RollHistory))
                                         {
-                                            @if (_session.CatanState.LastDiceTotal == 7)
-                                            {
-                                                <MudText Typo="Typo.body2">Saiu 7: ninguém recebe recursos.</MudText>
-                                            }
-                                            else if (_session.CatanState.LastRollResourceGains.Count == 0)
-                                            {
-                                                <MudText Typo="Typo.body2">Nenhum jogador produziu recursos nesta rolagem.</MudText>
-                                            }
-                                            else
-                                            {
-                                                @foreach (var gain in _session.CatanState.LastRollResourceGains)
-                                                {
-                                                    <MudText Typo="Typo.body2">@gain.PlayerNome recebeu +@gain.Amount @gain.ResourceType</MudText>
+                                            <div class="history-chat-line">
+                                                @{
+                                                    var turnPlayerColor = PlayerColorUtils.ToHex(
+                                                        _session.Players.FirstOrDefault(p => p.UsuarioId == entrada.CurrentTurnPlayerId)?.Cor
+                                                        ?? string.Empty);
                                                 }
-                                            }
+
+                                                <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                                                           Style="@($"background-color:{turnPlayerColor}; color:#fff;")">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                                </MudAvatar>
+
+                                                <span class="history-dice-inline">
+                                                    <DiceFace Value="@entrada.Dice1" Size="18" />
+                                                    <DiceFace Value="@entrada.Dice2" Size="18" />
+                                                </span>
+
+                                                @if (entrada.Total == 7)
+                                                {
+                                                    <span class="history-caption">• saiu 7, sem recursos</span>
+                                                }
+                                                else if (entrada.ResourceGains.Count == 0)
+                                                {
+                                                    <span class="history-caption">• sem ganhos</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="history-caption">•</span>
+                                                    @foreach (var ganho in entrada.ResourceGains)
+                                                    {
+                                                        var avatarColor = PlayerColorUtils.ToHex(_session.Players.FirstOrDefault(p =>
+                                p.UsuarioId == ganho.UsuarioId)?.Cor ?? string.Empty);
+                                                        <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                                                                   Style="@($"background-color:{avatarColor}; color:#fff;")">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                                        </MudAvatar>
+
+                                                        @for (var i = 0; i < ganho.Amount; i++)
+                                                        {
+                                                            <span class="history-resource-token">
+                                                                <ResourceTokenIcon ResourceType="@ganho.ResourceType" />
+                                                            </span>
+                                                        }
+                                                    }
+                                                }
+                                            </div>
                                         }
-                                    }
+                                    </div>
+                                }
+                            </MudPaper>
 
-                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Class="mt-3"
-                                               Disabled="@(!PodePassarTurno)" OnClick="ExecutarPassarTurnoAsync">
-                                        Passar turno
-                                    </MudButton>
-                                </MudPaper>
-                            }
-
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="@($"/sala/{SalaId}")">
-                                Voltar para a sala
-                            </MudButton>
+                            <GameChatPanel SalaId="@SalaId" />
                         </MudStack>
                     </MudItem>
                 </MudGrid>

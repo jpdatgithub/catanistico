@@ -371,6 +371,30 @@ public sealed class CatanGameSessionService : IGameSessionService
             DistributeResourcesForRoll(session, rolledTotal);
         }
 
+        var resourceGains = session.LastRollResourceGains
+            .Select(gain => new CatanResourceGainState
+            {
+                UsuarioId = gain.UsuarioId,
+                ResourceType = gain.ResourceType,
+                Amount = gain.Amount
+            })
+            .ToList();
+
+        session.RollHistory.Add(new CatanRollHistoryEntryState
+        {
+            RolledAtUtc = DateTime.UtcNow,
+            CurrentTurnPlayerId = session.CurrentPlayerId,
+            Dice1 = dice1,
+            Dice2 = dice2,
+            Total = rolledTotal,
+            ResourceGains = resourceGains
+        });
+
+        if (session.RollHistory.Count > 20)
+        {
+            session.RollHistory.RemoveAt(0);
+        }
+
         return null;
     }
 
@@ -902,6 +926,25 @@ public sealed class CatanGameSessionService : IGameSessionService
                         PlayerNome = session.Players.FirstOrDefault(player => player.UsuarioId == gain.UsuarioId)?.Nome ?? string.Empty,
                         ResourceType = gain.ResourceType,
                         Amount = gain.Amount
+                    })
+                    .ToList(),
+                RollHistory = session.RollHistory
+                    .Select(entry => new RollHistoryEntryResponse
+                    {
+                        RolledAtUtc = entry.RolledAtUtc,
+                        CurrentTurnPlayerId = entry.CurrentTurnPlayerId,
+                        Dice1 = entry.Dice1,
+                        Dice2 = entry.Dice2,
+                        Total = entry.Total,
+                        ResourceGains = entry.ResourceGains
+                            .Select(gain => new GameResourceGainResponse
+                            {
+                                UsuarioId = gain.UsuarioId,
+                                PlayerNome = session.Players.FirstOrDefault(player => player.UsuarioId == gain.UsuarioId)?.Nome ?? string.Empty,
+                                ResourceType = gain.ResourceType,
+                                Amount = gain.Amount
+                            })
+                            .ToList()
                     })
                     .ToList(),
                 RobberTileId = session.Board.RobberTileId,

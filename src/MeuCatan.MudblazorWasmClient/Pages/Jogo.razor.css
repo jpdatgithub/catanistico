@@ -1,5 +1,5 @@
 .game-page-shell {
-    height: calc(100dvh - 3rem);
+    height: calc(100dvh - 3.5rem);
     min-height: 0;
 }
 
@@ -36,6 +36,83 @@
 
 .game-resource-bar {
     flex: 0 0 auto;
+}
+
+.game-resource-bar-contents {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+}
+
+.game-resource-bar-contents> :first-child {
+    flex: 1 1 auto;
+}
+
+.dice-action-button {
+    flex: 0 0 auto;
+    min-width: auto;
+    padding: 6px 10px;
+}
+
+.resource-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+.history-chat-list {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 4px;
+    height: 132px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.history-chat-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.2;
+}
+
+.history-dice-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.history-chat-line {
+    flex-wrap: wrap;
+}
+
+.history-player-avatar {
+    width: 18px;
+    height: 18px;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+}
+
+.history-resource-token {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    font-size: 24px;
+    margin-left: 1px;
+}
+
+.history-resource-token ::deep .resource-token-icon {
+    width: 100%;
+    height: 100%;
+}
+
+.history-caption {
+    font-size: 0.75rem;
+    opacity: 0.9;
 }
 
 .game-page-shell ::deep .game-sidebar-content {

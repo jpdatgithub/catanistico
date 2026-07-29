@@ -98,6 +98,7 @@ public class CatanGameStateResponse
     public int? LastDice2 { get; set; }
     public int? LastDiceTotal { get; set; }
     public List<GameResourceGainResponse> LastRollResourceGains { get; set; } = [];
+    public List<RollHistoryEntryResponse> RollHistory { get; set; } = [];
     public int? RobberTileId { get; set; }
     public List<TradeOfferResponse> ActiveTradeOffers { get; set; } = [];
     public List<CatanTileResponse> Tiles { get; set; } = [];
@@ -113,6 +114,16 @@ public class GameResourceGainResponse
     public string PlayerNome { get; set; } = string.Empty;
     public string ResourceType { get; set; } = string.Empty;
     public int Amount { get; set; }
+}
+
+public class RollHistoryEntryResponse
+{
+    public DateTime RolledAtUtc { get; set; }
+    public int CurrentTurnPlayerId { get; set; }
+    public int Dice1 { get; set; }
+    public int Dice2 { get; set; }
+    public int Total { get; set; }
+    public List<GameResourceGainResponse> ResourceGains { get; set; } = [];
 }
 
 public class CatanTileResponse

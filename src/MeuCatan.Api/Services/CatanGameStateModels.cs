@@ -18,6 +18,7 @@ public sealed class CatanGameSessionState
     public int? LastDice1 { get; set; }
     public int? LastDice2 { get; set; }
     public List<CatanResourceGainState> LastRollResourceGains { get; set; } = [];
+    public List<CatanRollHistoryEntryState> RollHistory { get; set; } = [];
     public long NextTradeOfferId { get; set; } = 1;
     public List<CatanTradeOfferState> ActiveTradeOffers { get; set; } = [];
     public List<CatanPlayerState> Players { get; set; } = [];
@@ -39,6 +40,16 @@ public sealed class CatanResourceGainState
     public int UsuarioId { get; set; }
     public string ResourceType { get; set; } = string.Empty;
     public int Amount { get; set; }
+}
+
+public sealed class CatanRollHistoryEntryState
+{
+    public DateTime RolledAtUtc { get; set; }
+    public int CurrentTurnPlayerId { get; set; }
+    public int Dice1 { get; set; }
+    public int Dice2 { get; set; }
+    public int Total { get; set; }
+    public List<CatanResourceGainState> ResourceGains { get; set; } = [];
 }
 
 public sealed class CatanPlayerState
