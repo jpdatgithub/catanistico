@@ -28,18 +28,19 @@
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
-    gap: 8px;
+    gap: 6px;
 }
 
-.trade-resource-row--selected {
+.trade-resource-row--selected,
+.trade-empty-slot {
+    min-height: 36px;
+    box-sizing: border-box;
     margin-top: 2px;
 }
 
 .trade-empty-slot {
-    min-height: 88px;
     display: flex;
     align-items: center;
-    margin-top: 2px;
 }
 
 @media (max-width: 960px) {
@@ -53,7 +54,4 @@
         padding-bottom: 4px;
     }
 
-    .trade-empty-slot {
-        min-height: 76px;
-    }
 }

@@ -1,25 +1,38 @@
 <button type="button"
-        class="resource-card-button @(OnClick.HasDelegate ? "is-clickable" : string.Empty) @(Selected ? "is-selected" : string.Empty)"
-        disabled="@Disabled" @onclick="HandleClick">
-    <div class="resource-card-shell @(Compact ? "resource-card-shell--compact" : string.Empty)">
-        @if (Count > 2)
-        {
-            <div class="resource-card-layer @ResourceClass layer-back"></div>
-        }
-
-        @if (Count > 1)
-        {
-            <div class="resource-card-layer @ResourceClass layer-middle"></div>
-        }
-
-        <div class="resource-card @ResourceClass @(Compact ? "resource-card--compact" : string.Empty)">
-            <span class="resource-name">@DisplayName</span>
+        class="resource-card-button @(Token ? "resource-card-button--token" : string.Empty) @(OnClick.HasDelegate ? "is-clickable" : string.Empty) @(Selected ? "is-selected" : string.Empty)"
+        disabled="@Disabled" @onclick="HandleClick" title="@DisplayName" aria-label="@AccessibleLabel">
+    @if (Token)
+    {
+        <span class="resource-token @ResourceClass">
+            <ResourceTokenIcon ResourceType="@ResourceType" />
             @if (Count > 0)
             {
-                <span class="resource-count @(Compact ? "resource-count--compact" : string.Empty)">@Count</span>
+                <span class="resource-token-count">@Count</span>
             }
+        </span>
+    }
+    else
+    {
+        <div class="resource-card-shell @(Compact ? "resource-card-shell--compact" : string.Empty)">
+            @if (Count > 2)
+            {
+                <div class="resource-card-layer @ResourceClass layer-back"></div>
+            }
+
+            @if (Count > 1)
+            {
+                <div class="resource-card-layer @ResourceClass layer-middle"></div>
+            }
+
+            <div class="resource-card @ResourceClass @(Compact ? "resource-card--compact" : string.Empty)">
+                <ResourceTokenIcon ResourceType="@ResourceType" />
+                @if (Count > 0)
+                {
+                    <span class="resource-card-count">@Count</span>
+                }
+            </div>
         </div>
-    </div>
+    }
 </button>
 
 @code {
@@ -31,6 +44,9 @@
 
     [Parameter]
     public bool Compact { get; set; }
+
+    [Parameter]
+    public bool Token { get; set; }
 
     [Parameter]
     public bool Disabled { get; set; }
@@ -60,6 +76,8 @@
         "pedra" => "Pedra",
         _ => ResourceType
     };
+
+    private string AccessibleLabel => Count > 0 ? $"{DisplayName}: {Count}" : DisplayName;
 
     private async Task HandleClick()
     {

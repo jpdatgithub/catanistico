@@ -7,7 +7,7 @@
                     <div class="trade-resource-row trade-resource-row--selected">
                         @foreach (var resource in ResourceOrder)
                         {
-                            <ResourceCard Compact=true ResourceType="@resource" Count=0
+                            <ResourceCard Token=true ResourceType="@resource" Count=0
                                           OnClick="@(() => AddAskedResource(resource))" />
                         }
                     </div>
@@ -40,7 +40,7 @@
                             <div class="trade-resource-row trade-resource-row--selected">
                                 @foreach (var resource in AskedResourceEntries)
                                 {
-                                    <ResourceCard ResourceType="@resource.Key" Count="@resource.Value"
+                                    <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value"
                                                   OnClick="@(() => RemoveAskedResource(resource.Key))" />
                                 }
                             </div>
@@ -71,7 +71,7 @@
                             <div class="trade-resource-row trade-resource-row--selected">
                                 @foreach (var resource in OfferedResourceEntries)
                                 {
-                                    <ResourceCard ResourceType="@resource.Key" Count="@resource.Value"
+                                    <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value"
                                                   OnClick="@(() => HandleSelectedResourceClick(resource.Key))" />
                                 }
                             </div>

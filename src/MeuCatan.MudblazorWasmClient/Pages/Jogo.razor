@@ -9,23 +9,24 @@
 
 <PageTitle>Jogo</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="mt-4 mb-8 px-4">
-    @if (_carregando && _session is null)
-    {
-        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-    }
-    else if (_session is null)
-    {
-        <MudAlert Severity="Severity.Error">@(_erro ?? "Sessão de jogo não encontrada.")</MudAlert>
-    }
-    else
-    {
-        var currentPlayer = _session.Players.FirstOrDefault(player => player.UsuarioId == _session.YourPlayerId);
+<div class="game-page-shell">
+    <MudContainer MaxWidth="MaxWidth.False" Class="game-page px-4">
+        @if (_carregando && _session is null)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (_session is null)
+        {
+            <MudAlert Severity="Severity.Error">@(_erro ?? "Sessão de jogo não encontrada.")</MudAlert>
+        }
+        else
+        {
+            var currentPlayer = _session.Players.FirstOrDefault(player => player.UsuarioId == _session.YourPlayerId);
 
-        <MudGrid>
-            <MudItem xs="12" md="8">
-                <MudPaper Class="pa-4">
-                    @* <MudText Typo="Typo.h5" Class="mb-2">Tabuleiro de Catan</MudText>
+            <MudGrid Class="game-layout">
+                <MudItem xs="12" md="8" Class="game-board-column">
+                    <MudPaper Class="game-board-surface pa-4">
+                        @* <MudText Typo="Typo.h5" Class="mb-2">Tabuleiro de Catan</MudText>
                         <MudText Typo="Typo.body2" Class="mb-4">
                             Este primeiro corte já carrega uma sessão real e um board SVG do Catan. As ações interativas de
                             colocação inicial entram no próximo passo.
@@ -36,193 +37,198 @@
                             aldeia e aresta para estrada.
                         </MudText> *@
 
-                    <div style="position: relative;">
-                        @if (_session.CatanState is not null)
-                        {
-                            <CatanBoardSvg State="_session.CatanState" DisplayWidth="1080" DisplayHeight="720"
-                                           OnVertexClicked="ExecutarPosicionamentoInicialAsync"
-                                           OnEdgeClicked="ExecutarPosicionamentoEstradaInicialAsync" />
-                        }
-
-                        @if (currentPlayer is not null && _isTradeOpen)
-                        {
-                            <ResourceTradePanel Player="currentPlayer" IsOpen="true" OfferedResources="_selectedTradeResources"
-                                                AskedResources="_askedTradeResources" OnClose="FecharInterfaceTrocaAsync"
-                                                OnSelectedResourceClicked="RemoverRecursoDaTrocaAsync"
-                                                OnOffer="ExecutarOfertaTrocaAsync" />
-                        }
-
-                        <OfferViewPanelStack Offers="OfertasAtivas" />
-                    </div>
-
-                    @if (currentPlayer is not null)
-                    {
-                        <div>
-                            <PlayerResourcePanel Player="currentPlayer" SelectedResources="_selectedTradeResources"
-                                                 CanInteract="@PodeInteragirComRecursos"
-                                                 OnResourceClicked="AbrirOuAdicionarRecursoNaTrocaAsync" />
-                        </div>
-                    }
-                </MudPaper>
-            </MudItem>
-
-            <MudItem xs="12" md="4">
-                <MudStack Spacing="2">
-                    <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6">Sessão</MudText>
-                        <MudText Typo="Typo.body2">Sala: @_session.SalaId</MudText>
-                        <MudText Typo="Typo.body2">Jogo: @_session.GameType</MudText>
-                        <MudText Typo="Typo.body2">Fase: @FormatarFase(_session.Phase)</MudText>
-                        <MudText Typo="Typo.body2">Turno atual: @_session.CurrentPlayerNome</MudText>
-                        <MudText Typo="Typo.body2">Você pode agir: @(_session.CanCurrentUserAct ? "sim" : "não")</MudText>
-                    </MudPaper>
-
-                    <MudPaper Class="pa-4">
-                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                            <MudText Typo="Typo.h6">Jogadores</MudText>
-                            <MudButton Variant="Variant.Text" OnClick="AtualizarSessaoAsync" Disabled="@_carregando">
-                                Atualizar
-                            </MudButton>
-                        </MudStack>
-                        <MudList T="GamePlayerStateResponse">
-                            @foreach (var player in _session.Players)
-                            {
-                                <MudListItem T="GamePlayerStateResponse" Value="player">
-                                    <MudStack Spacing="0" Class="w-100">
-                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                            <MudText>@player.Nome</MudText>
-                                            <MudChip Size="Size.Small"
-                                                     Color="@(player.IsCurrentTurn ? Color.Primary : Color.Default)">@player.Cor
-                                            </MudChip>
-                                        </MudStack>
-                                        <MudText Typo="Typo.caption">Pontos: @player.Pontos</MudText>
-                                        <MudText Typo="Typo.caption">Peças: estradas @player.RemainingRoads, aldeias
-                                            @player.RemainingSettlements, cidades @player.RemainingCities</MudText>
-                                        </MudStack>
-                                    </MudListItem>
-                                }
-                                }
-                            </MudList>
-                        </MudPaper>
-
-                        <GameChatPanel SalaId="@SalaId" />
-
-                        @if (DebugStatePanelEnabled)
-                        {
-                            <MudPaper Class="pa-4">
-                                <MudText Typo="Typo.h6">Debug do state (backend)</MudText>
-                                <MudExpansionPanels>
-                                    <MudExpansionPanel Text="GameSessionResponse (completo)">
-                                        <MudText Typo="Typo.caption" Class="text-wrap"
-                                                 Style="white-space: pre-wrap; font-family: Consolas, monospace;">@SessionDebugJson
-                                        </MudText>
-                                    </MudExpansionPanel>
-
-                                    @if (_session.CatanState is not null)
-                                    {
-                                        <MudExpansionPanel Text="CatanState">
-                                            <MudText Typo="Typo.caption" Class="text-wrap"
-                                                     Style="white-space: pre-wrap; font-family: Consolas, monospace;">@CatanStateDebugJson
-                                            </MudText>
-                                        </MudExpansionPanel>
-                                    }
-                                </MudExpansionPanels>
-                            </MudPaper>
-                        }
-
-                        <MudPaper Class="pa-4">
-                            <MudText Typo="Typo.h6">Setup inicial</MudText>
-                            @if (!string.IsNullOrWhiteSpace(_acaoErro))
-                            {
-                                <MudAlert Severity="Severity.Warning" Class="mb-2">@_acaoErro</MudAlert>
-                            }
+                        <div class="game-board-viewport">
                             @if (_session.CatanState is not null)
                             {
-                                <MudText Typo="Typo.body2">Etapa atual: @_session.CatanState.SetupStepIndex</MudText>
-                                <MudText Typo="Typo.body2">Ordem de setup: @string.Join(" -> ", _session.CatanState.SetupTurnOrder)
-                                </MudText>
-                                <MudText Typo="Typo.body2">Última aldeia:
-                                    @(_session.CatanState.LastPlacedSettlementVertexId?.ToString() ?? "nenhuma")</MudText>
-                                    <MudText Typo="Typo.body2">Aguardando estrada inicial:
-                                        @(_session.CatanState.AwaitingInitialRoadPlacement ? "sim" : "não")</MudText>
-                                        <MudText Typo="Typo.body2">Vértice base da estrada:
-                                            @(_session.CatanState.PendingInitialRoadFromVertexId?.ToString() ?? "n/a")</MudText>
-                                            <MudText Typo="Typo.body2">Ladrão no tile: @(_session.CatanState.RobberTileId?.ToString() ?? "n/d")
+                                <CatanBoardSvg State="_session.CatanState" FillParent="true"
+                                               OnVertexClicked="ExecutarPosicionamentoInicialAsync"
+                                               OnEdgeClicked="ExecutarPosicionamentoEstradaInicialAsync" />
+                            }
+
+                            @if (currentPlayer is not null && _isTradeOpen)
+                            {
+                                <ResourceTradePanel Player="currentPlayer" IsOpen="true"
+                                                    OfferedResources="_selectedTradeResources" AskedResources="_askedTradeResources"
+                                                    OnClose="FecharInterfaceTrocaAsync" OnSelectedResourceClicked="RemoverRecursoDaTrocaAsync"
+                                                    OnOffer="ExecutarOfertaTrocaAsync" />
+                            }
+
+                            <OfferViewPanelStack Offers="OfertasAtivas" />
+                        </div>
+
+                        @if (currentPlayer is not null)
+                        {
+                            <div class="game-resource-bar">
+                                <PlayerResourcePanel Player="currentPlayer" SelectedResources="_selectedTradeResources"
+                                                     CanInteract="@PodeInteragirComRecursos"
+                                                     OnResourceClicked="AbrirOuAdicionarRecursoNaTrocaAsync" />
+                            </div>
+                        }
+                    </MudPaper>
+                </MudItem>
+
+                <MudItem xs="12" md="4" Class="game-sidebar-column">
+                    <MudStack Spacing="2" Class="game-sidebar-content">
+                        <MudPaper Class="pa-4">
+                            <MudText Typo="Typo.h6">Sessão</MudText>
+                            <MudText Typo="Typo.body2">Sala: @_session.SalaId</MudText>
+                            <MudText Typo="Typo.body2">Jogo: @_session.GameType</MudText>
+                            <MudText Typo="Typo.body2">Fase: @FormatarFase(_session.Phase)</MudText>
+                            <MudText Typo="Typo.body2">Turno atual: @_session.CurrentPlayerNome</MudText>
+                            <MudText Typo="Typo.body2">Você pode agir: @(_session.CanCurrentUserAct ? "sim" : "não")
+                            </MudText>
+                        </MudPaper>
+
+                        <MudPaper Class="pa-4">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.h6">Jogadores</MudText>
+                                <MudButton Variant="Variant.Text" OnClick="AtualizarSessaoAsync" Disabled="@_carregando">
+                                    Atualizar
+                                </MudButton>
+                            </MudStack>
+                            <MudList T="GamePlayerStateResponse">
+                                @foreach (var player in _session.Players)
+                                {
+                                    <MudListItem T="GamePlayerStateResponse" Value="player">
+                                        <MudStack Spacing="0" Class="w-100">
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                <MudText>@player.Nome</MudText>
+                                                <MudChip Size="Size.Small"
+                                                         Color="@(player.IsCurrentTurn ? Color.Primary : Color.Default)">@player.Cor
+                                                </MudChip>
+                                            </MudStack>
+                                            <MudText Typo="Typo.caption">Pontos: @player.Pontos</MudText>
+                                            <MudText Typo="Typo.caption">Peças: estradas @player.RemainingRoads, aldeias
+                                                @player.RemainingSettlements, cidades @player.RemainingCities</MudText>
+                                            </MudStack>
+                                        </MudListItem>
+                                    }
+                                    }
+                                </MudList>
+                            </MudPaper>
+
+                            <GameChatPanel SalaId="@SalaId" />
+
+                            @if (DebugStatePanelEnabled)
+                            {
+                                <MudPaper Class="pa-4">
+                                    <MudText Typo="Typo.h6">Debug do state (backend)</MudText>
+                                    <MudExpansionPanels>
+                                        <MudExpansionPanel Text="GameSessionResponse (completo)">
+                                            <MudText Typo="Typo.caption" Class="text-wrap"
+                                                     Style="white-space: pre-wrap; font-family: Consolas, monospace;">@SessionDebugJson
                                             </MudText>
-                                        }
-                                    </MudPaper>
+                                        </MudExpansionPanel>
 
-                                    <MudPaper Class="pa-4">
-                                        <MudText Typo="Typo.h6">Próximas ações</MudText>
-                                        @if (_session.AvailableActions.Count == 0)
+                                        @if (_session.CatanState is not null)
                                         {
-                                            <MudText Typo="Typo.body2">Nenhuma ação disponível para você neste momento.</MudText>
-                                        }
-                                        else
-                                        {
-                                            @foreach (var action in _session.AvailableActions)
-                                            {
-                                                <MudChip T="string" Class="mr-1 mb-1" Color="Color.Info" Value="@action">@action</MudChip>
-                                            }
-                                        }
-                                    </MudPaper>
-
-                                    @if (_session.Phase == GameTipoFase.Turno && _session.CatanState is not null)
-                                    {
-                                        <MudPaper Class="pa-4">
-                                            <MudText Typo="Typo.h6">Turno</MudText>
-
-                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2" Disabled="@(!PodeRolarDados)"
-                                                       OnClick="ExecutarRolagemDadosAsync">
-                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                    <DiceFace Value="@(_session.CatanState.LastDice1 ?? 6)" Size="36" />
-                                                    <DiceFace Value="@(_session.CatanState.LastDice2 ?? 6)" Size="36" />
-                                                    <MudText Typo="Typo.button" Class="ml-1">Rolar dados</MudText>
-                                                </MudStack>
-                                            </MudButton>
-
-                                            @if (_session.CatanState.LastDiceTotal is not null)
-                                            {
-                                                <MudText Typo="Typo.body1" Class="mt-2">
-                                                    Último resultado: @_session.CatanState.LastDice1 + @_session.CatanState.LastDice2 =
-                                                    <b>@_session.CatanState.LastDiceTotal</b>
+                                            <MudExpansionPanel Text="CatanState">
+                                                <MudText Typo="Typo.caption" Class="text-wrap"
+                                                         Style="white-space: pre-wrap; font-family: Consolas, monospace;">
+                                                    @CatanStateDebugJson
                                                 </MudText>
+                                            </MudExpansionPanel>
+                                        }
+                                    </MudExpansionPanels>
+                                </MudPaper>
+                            }
 
-                                                @if (_session.CatanState.HasRolledDiceThisTurn)
+                            <MudPaper Class="pa-4">
+                                <MudText Typo="Typo.h6">Setup inicial</MudText>
+                                @if (!string.IsNullOrWhiteSpace(_acaoErro))
+                                {
+                                    <MudAlert Severity="Severity.Warning" Class="mb-2">@_acaoErro</MudAlert>
+                                }
+                                @if (_session.CatanState is not null)
+                                {
+                                    <MudText Typo="Typo.body2">Etapa atual: @_session.CatanState.SetupStepIndex</MudText>
+                                    <MudText Typo="Typo.body2">Ordem de setup: @string.Join(" -> ",
+                                                                    _session.CatanState.SetupTurnOrder)
+                                    </MudText>
+                                    <MudText Typo="Typo.body2">Última aldeia:
+                                        @(_session.CatanState.LastPlacedSettlementVertexId?.ToString() ?? "nenhuma")</MudText>
+                                        <MudText Typo="Typo.body2">Aguardando estrada inicial:
+                                            @(_session.CatanState.AwaitingInitialRoadPlacement ? "sim" : "não")</MudText>
+                                            <MudText Typo="Typo.body2">Vértice base da estrada:
+                                                @(_session.CatanState.PendingInitialRoadFromVertexId?.ToString() ?? "n/a")</MudText>
+                                                <MudText Typo="Typo.body2">Ladrão no tile: @(_session.CatanState.RobberTileId?.ToString() ??
+                                                                                "n/d")
+                                                </MudText>
+                                            }
+                                        </MudPaper>
+
+                                        <MudPaper Class="pa-4">
+                                            <MudText Typo="Typo.h6">Próximas ações</MudText>
+                                            @if (_session.AvailableActions.Count == 0)
+                                            {
+                                                <MudText Typo="Typo.body2">Nenhuma ação disponível para você neste momento.</MudText>
+                                            }
+                                            else
+                                            {
+                                                @foreach (var action in _session.AvailableActions)
                                                 {
-                                                    @if (_session.CatanState.LastDiceTotal == 7)
+                                                    <MudChip T="string" Class="mr-1 mb-1" Color="Color.Info" Value="@action">@action</MudChip>
+                                                }
+                                            }
+                                        </MudPaper>
+
+                                        @if (_session.Phase == GameTipoFase.Turno && _session.CatanState is not null)
+                                        {
+                                            <MudPaper Class="pa-4">
+                                                <MudText Typo="Typo.h6">Turno</MudText>
+
+                                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2"
+                                                           Disabled="@(!PodeRolarDados)" OnClick="ExecutarRolagemDadosAsync">
+                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                        <DiceFace Value="@(_session.CatanState.LastDice1 ?? 6)" Size="36" />
+                                                        <DiceFace Value="@(_session.CatanState.LastDice2 ?? 6)" Size="36" />
+                                                        <MudText Typo="Typo.button" Class="ml-1">Rolar dados</MudText>
+                                                    </MudStack>
+                                                </MudButton>
+
+                                                @if (_session.CatanState.LastDiceTotal is not null)
+                                                {
+                                                    <MudText Typo="Typo.body1" Class="mt-2">
+                                                        Último resultado: @_session.CatanState.LastDice1 + @_session.CatanState.LastDice2 =
+                                                        <b>@_session.CatanState.LastDiceTotal</b>
+                                                    </MudText>
+
+                                                    @if (_session.CatanState.HasRolledDiceThisTurn)
                                                     {
-                                                        <MudText Typo="Typo.body2">Saiu 7: ninguém recebe recursos.</MudText>
-                                                    }
-                                                    else if (_session.CatanState.LastRollResourceGains.Count == 0)
-                                                    {
-                                                        <MudText Typo="Typo.body2">Nenhum jogador produziu recursos nesta rolagem.</MudText>
-                                                    }
-                                                    else
-                                                    {
-                                                        @foreach (var gain in _session.CatanState.LastRollResourceGains)
+                                                        @if (_session.CatanState.LastDiceTotal == 7)
                                                         {
-                                                            <MudText Typo="Typo.body2">@gain.PlayerNome recebeu +@gain.Amount @gain.ResourceType</MudText>
+                                                            <MudText Typo="Typo.body2">Saiu 7: ninguém recebe recursos.</MudText>
+                                                        }
+                                                        else if (_session.CatanState.LastRollResourceGains.Count == 0)
+                                                        {
+                                                            <MudText Typo="Typo.body2">Nenhum jogador produziu recursos nesta rolagem.</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            @foreach (var gain in _session.CatanState.LastRollResourceGains)
+                                                            {
+                                                                <MudText Typo="Typo.body2">@gain.PlayerNome recebeu +@gain.Amount @gain.ResourceType</MudText>
+                                                            }
                                                         }
                                                     }
                                                 }
-                                            }
 
-                                            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Class="mt-3"
-                                                       Disabled="@(!PodePassarTurno)" OnClick="ExecutarPassarTurnoAsync">
-                                                Passar turno
-                                            </MudButton>
-                                        </MudPaper>
-                                    }
+                                                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Class="mt-3"
+                                                           Disabled="@(!PodePassarTurno)" OnClick="ExecutarPassarTurnoAsync">
+                                                    Passar turno
+                                                </MudButton>
+                                            </MudPaper>
+                                        }
 
-                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="@($"/sala/{SalaId}")">
-                                        Voltar para a sala
-                                    </MudButton>
-                                </MudStack>
-                            </MudItem>
-                        </MudGrid>
-                    }
-                </MudContainer>
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="@($"/sala/{SalaId}")">
+                                            Voltar para a sala
+                                        </MudButton>
+                                    </MudStack>
+                                </MudItem>
+                            </MudGrid>
+                        }
+                    </MudContainer>
+                </div>
 
 @code {
     [Parameter]

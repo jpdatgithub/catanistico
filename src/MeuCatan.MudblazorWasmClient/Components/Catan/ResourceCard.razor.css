@@ -21,23 +21,36 @@
     outline-offset: 2px;
 }
 
+.resource-card-button--token {
+    width: 32px;
+    height: 32px;
+    padding: 2px;
+}
+
+.resource-card-button.is-selected .resource-token {
+    outline: 2px solid rgba(239, 68, 68, 0.70);
+    outline-offset: 2px;
+}
+
 .resource-card-shell {
     position: relative;
-    width: 68px;
-    height: 88px;
+    width: 80px;
+    height: 96px;
 }
 
 .resource-card-shell--compact {
-    width: 42px;
-    height: 54px;
+    width: 72px;
+    height: 80px;
 }
 
 .resource-card-layer,
 .resource-card {
     position: absolute;
     inset: 0;
-    border-radius: 12px;
-    border: 1px solid rgba(0, 0, 0, 0.24);
+    box-sizing: border-box;
+    border: 2px solid var(--resource-accent, #8a939c);
+    border-radius: 8px;
+    background: #fff;
 }
 
 .resource-card-layer {
@@ -54,90 +67,123 @@
 
 .resource-card {
     display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    padding: 10px;
+    align-items: center;
+    justify-content: center;
     box-shadow: 0 8px 14px rgba(0, 0, 0, 0.2);
 }
 
-.resource-card--compact {
-    padding: 4px;
+.resource-card ::deep .resource-token-icon {
+    width: 64px;
+    height: 64px;
 }
 
-.resource-name {
-    font-weight: 700;
-    font-size: 0.95rem;
-    letter-spacing: 0.02em;
-}
-
-.resource-count {
+.resource-card-count {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    min-width: 28px;
-    height: 28px;
+    right: 3px;
+    bottom: 3px;
+    z-index: 1;
+    display: inline-flex;
+    min-width: 24px;
+    height: 24px;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    border: 2px solid #fff;
     border-radius: 999px;
-    background: rgba(20, 20, 20, 0.85);
+    background: #172033;
     color: #fff;
+    font-size: 0.75rem;
     font-weight: 800;
+    line-height: 1;
+}
+
+.resource-token {
+    position: relative;
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(15, 23, 42, 0.26);
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.20), inset 0 1px rgba(255, 255, 255, 0.34);
+}
+
+.resource-token ::deep .resource-token-icon {
+    width: 32px;
+    height: 32px;
+}
+
+.resource-token-count {
+    position: absolute;
+    right: -5px;
+    bottom: -5px;
+    min-width: 14px;
+    height: 14px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0 8px;
-}
-
-.resource-count--compact {
-    top: 4%;
-    right: 4px;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    font-size: 0.5rem;
+    padding: 0 3px;
+    border: 1px solid rgba(255, 255, 255, 0.92);
+    border-radius: 999px;
+    background: #172033;
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 800;
+    line-height: 1;
 }
 
 .resource-madeira {
+    --resource-accent: #9f6a3b;
     background: linear-gradient(160deg, #cba775 0%, #9f6a3b 100%);
     color: #1f1309;
 }
 
 .resource-argila {
+    --resource-accent: #a6452e;
     background: linear-gradient(160deg, #d58a5f 0%, #a6452e 100%);
     color: #2b100a;
 }
 
 .resource-ovelha {
+    --resource-accent: #95c26e;
     background: linear-gradient(160deg, #d5efb3 0%, #95c26e 100%);
     color: #15300d;
 }
 
 .resource-trigo {
+    --resource-accent: #d0a538;
     background: linear-gradient(160deg, #f7e18a 0%, #d0a538 100%);
     color: #3d2b06;
 }
 
 .resource-pedra {
+    --resource-accent: #8a939c;
     background: linear-gradient(160deg, #d3dae0 0%, #8a939c 100%);
     color: #1d2329;
 }
 
 .resource-default {
+    --resource-accent: #bcc1c9;
     background: linear-gradient(160deg, #ecedf0 0%, #bcc1c9 100%);
     color: #1d2329;
 }
 
+.resource-card-shell .resource-card-layer,
+.resource-card-shell .resource-card {
+    background: #fff;
+}
+
 @media (max-width: 960px) {
     .resource-card-shell {
-        width: 58px;
-        height: 76px;
+        width: 80px;
+        height: 96px;
         flex: 0 0 auto;
     }
 
     .resource-card-shell--compact {
-        width: 46px;
-        height: 60px;
-    }
-
-    .resource-name {
-        font-size: 0.88rem;
+        width: 72px;
+        height: 80px;
     }
 }

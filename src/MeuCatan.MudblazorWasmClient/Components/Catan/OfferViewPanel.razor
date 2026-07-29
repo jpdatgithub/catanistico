@@ -12,7 +12,7 @@
             <div class="offer-resource-row">
                 @foreach (var resource in OfferedResourceEntries)
                 {
-                    <ResourceCard ResourceType="@resource.Key" Count="@resource.Value" Disabled="true" />
+                    <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value" Disabled="true" />
                 }
             </div>
         </div>
@@ -22,15 +22,24 @@
             <div class="offer-resource-row">
                 @foreach (var resource in AskedResourceEntries)
                 {
-                    <ResourceCard ResourceType="@resource.Key" Count="@resource.Value" Disabled="true" />
+                    <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value" Disabled="true" />
                 }
             </div>
         </div>
 
         <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
-            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">Recusar</MudButton>
-            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Secondary">Editar</MudButton>
-            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary">Aceitar</MudButton>
+            <MudTooltip Text="Recusar">
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Variant="Variant.Outlined"
+                               Color="Color.Default" aria-label="Recusar" />
+            </MudTooltip>
+            <MudTooltip Text="Editar">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Variant="Variant.Outlined"
+                               Color="Color.Secondary" aria-label="Editar" />
+            </MudTooltip>
+            <MudTooltip Text="Aceitar">
+                <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Variant="Variant.Filled"
+                               Color="Color.Primary" aria-label="Aceitar" />
+            </MudTooltip>
         </MudStack>
     </MudStack>
 </MudPaper>

@@ -11,7 +11,7 @@ else
     var model = CatanBoardLayoutBuilder.Build(State);
     var transform = $"translate({F(_tx)},{F(_ty)}) scale({F(_scale)})";
 
-    <div @ref="_containerRef" style="width:100%; height:@(DisplayHeight)px; overflow:hidden; user-select:none;"
+    <div @ref="_containerRef" style="width:100%; height:@(ContainerHeight); overflow:hidden; user-select:none;"
          @onmousemove="OnMouseMove" @onmouseup="OnMouseUp" @onmouseleave="OnMouseUp">
         <svg width="100%" height="100%" class="catan-board-svg" role="img" aria-label="Tabuleiro do Catan"
              style="display:block;" @onwheel="OnWheel" @onwheel:preventDefault @onmousedown="OnMouseDown">
@@ -147,6 +147,7 @@ else
     [Parameter] public CatanGameStateResponse? State { get; set; }
     [Parameter] public double DisplayWidth { get; set; } = 900;
     [Parameter] public double DisplayHeight { get; set; } = 700;
+    [Parameter] public bool FillParent { get; set; }
     [Parameter] public EventCallback<int> OnVertexClicked { get; set; }
     [Parameter] public EventCallback<EdgeKey> OnEdgeClicked { get; set; }
 
@@ -170,6 +171,7 @@ else
     // Actual display dimensions - measured value takes priority over parameter
     private double W => _containerW > 0 ? _containerW : DisplayWidth;
     private double H => _containerH > 0 ? _containerH : DisplayHeight;
+    private string ContainerHeight => FillParent ? "100%" : $"{DisplayHeight}px";
 
     protected override void OnInitialized()
     {

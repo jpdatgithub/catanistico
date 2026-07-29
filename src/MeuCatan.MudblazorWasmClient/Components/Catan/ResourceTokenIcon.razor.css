@@ -1,0 +1,12 @@
+.resource-token-icon {
+    display: block;
+    width: 1em;
+    height: 1em;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    padding: 1px;
+    border-radius: 50%;
+    background: #fff;
+    object-fit: contain;
+    user-select: none;
+}

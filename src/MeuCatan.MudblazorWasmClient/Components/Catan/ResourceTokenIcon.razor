@@ -1,0 +1,26 @@
+<img class="resource-token-icon" src="@IconPath" alt="@AccessibleLabel" draggable="false" />
+
+@code {
+    [Parameter, EditorRequired]
+    public string ResourceType { get; set; } = string.Empty;
+
+    private string IconPath => ResourceType.ToLowerInvariant() switch
+    {
+        "madeira" => "images/resources/madeira.svg",
+        "argila" => "images/resources/argila.svg",
+        "ovelha" => "images/resources/ovelha.svg",
+        "trigo" => "images/resources/trigo.svg",
+        "pedra" => "images/resources/pedra.svg",
+        _ => "images/resources/pedra.svg"
+    };
+
+    private string AccessibleLabel => ResourceType.ToLowerInvariant() switch
+    {
+        "madeira" => "Madeira",
+        "argila" => "Argila",
+        "ovelha" => "Ovelha",
+        "trigo" => "Trigo",
+        "pedra" => "Pedra",
+        _ => ResourceType
+    };
+}
