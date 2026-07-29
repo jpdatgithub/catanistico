@@ -6,7 +6,7 @@
     flex: 0 0 auto;
     padding: 1px;
     border-radius: 50%;
-    background: #fff;
+    background: linear-gradient(145deg, #fffaf0 0%, #f1dfbd 100%);
     object-fit: contain;
     user-select: none;
 }
