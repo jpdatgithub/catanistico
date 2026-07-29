@@ -145,6 +145,7 @@ else
     private const double ZoomMax = 4.0;
 
     [Parameter] public CatanGameStateResponse? State { get; set; }
+    [Parameter] public IReadOnlyDictionary<int, string>? PlayerColorsById { get; set; }
     [Parameter] public double DisplayWidth { get; set; } = 900;
     [Parameter] public double DisplayHeight { get; set; } = 700;
     [Parameter] public bool FillParent { get; set; }
@@ -295,43 +296,25 @@ else
             && string.Equals(vertex.BuildingType, "aldeia", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetVillageBodyColor(int? ownerPlayerId)
-    {
-        return ((ownerPlayerId ?? 0) % 6) switch
-        {
-            0 => "#fde68a",
-            1 => "#fca5a5",
-            2 => "#86efac",
-            3 => "#93c5fd",
-            4 => "#d8b4fe",
-            _ => "#fdba74"
-        };
-    }
+    private string GetVillageBodyColor(int? ownerPlayerId) => GetOwnerColor(ownerPlayerId);
 
-    private static string GetVillageRoofColor(int? ownerPlayerId)
-    {
-        return ((ownerPlayerId ?? 0) % 6) switch
-        {
-            0 => "#b45309",
-            1 => "#b91c1c",
-            2 => "#166534",
-            3 => "#1d4ed8",
-            4 => "#7e22ce",
-            _ => "#c2410c"
-        };
-    }
+    private string GetVillageRoofColor(int? ownerPlayerId) => GetOwnerColor(ownerPlayerId);
 
-    private static string GetRoadColor(int? ownerPlayerId)
+    private string GetRoadColor(int? ownerPlayerId) => GetOwnerColor(ownerPlayerId);
+
+    private string GetOwnerColor(int? ownerPlayerId)
     {
-        return ((ownerPlayerId ?? 0) % 6) switch
+        if (ownerPlayerId is null)
         {
-            0 => "#f59e0b",
-            1 => "#ef4444",
-            2 => "#22c55e",
-            3 => "#3b82f6",
-            4 => "#a855f7",
-            _ => "#f97316"
-        };
+            return "#475569";
+        }
+
+        if (PlayerColorsById is not null && PlayerColorsById.TryGetValue(ownerPlayerId.Value, out var colorName))
+        {
+            return PlayerColorUtils.ToHex(colorName);
+        }
+
+        return "#475569";
     }
 
     private record ElementBounds(double Width, double Height);

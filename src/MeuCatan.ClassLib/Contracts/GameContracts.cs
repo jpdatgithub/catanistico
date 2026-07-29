@@ -44,6 +44,7 @@ public class GamePlayerStateResponse
     public int RemainingSettlements { get; set; }
     public int RemainingCities { get; set; }
     public Dictionary<string, int> Resources { get; set; } = [];
+    public Dictionary<string, int> BankTradeRates { get; set; } = [];
 }
 
 public class GameActionRequest

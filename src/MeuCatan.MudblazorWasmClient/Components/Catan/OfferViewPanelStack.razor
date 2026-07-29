@@ -3,7 +3,7 @@
     <div class="offer-view-stack" aria-label="Ofertas de troca ativas">
         @foreach (var offer in Offers)
         {
-            <OfferViewPanel @key="offer.OfferId" Offer="offer" />
+            <OfferViewPanel @key="offer.OfferId" Offer="offer" ViewerColor="@ViewerColor" />
         }
     </div>
 }
@@ -11,4 +11,7 @@
 @code {
     [Parameter]
     public IReadOnlyList<TradeOfferResponse> Offers { get; set; } = [];
+
+    [Parameter]
+    public string? ViewerColor { get; set; }
 }

@@ -14,73 +14,96 @@
                     <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Variant="Variant.Text"
                                    Color="Color.Default" aria-label="Fechar interface de trocas" OnClick="HandleClose" />
                 </MudStack>
-                <MudStack>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Style="color:green;" Class="trade-arrow" />
+                <MudStack Row="true">
+                    <MudStack Class="flex-grow-1" Justify="Justify.SpaceAround">
+                        <MudStack Row="true">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Style="color:green;"
+                                             Class="trade-arrow" />
 
-                            <MudAvatar Size="Size.Small" Class="trade-avatar"
-                                       Style="@($"background-color:gray; color:#fff;")">
-                                <MudIcon Icon="@Icons.Material.Filled.Person" />
-                            </MudAvatar>
+                                    <MudAvatar Size="Size.Small" Class="trade-avatar"
+                                               Style="@($"background-color:gray; color:#fff;")">
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" />
+                                    </MudAvatar>
+                                </MudStack>
+                            </MudStack>
 
-                            <MudText Typo="Typo.subtitle2">Pedindo</MudText>
+                            <MudStack Spacing="1">
+                                @if (AskedResourceEntries.Count == 0)
+                                {
+                                    <div class="trade-empty-slot">
+                                        <MudText Typo="Typo.body2">Clique em uma carta acima para pedi-la.</MudText>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="trade-resource-row trade-resource-row--selected">
+                                        @foreach (var resource in AskedResourceEntries)
+                                        {
+                                            <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value"
+                                                          OnClick="@(() => RemoveAskedResource(resource.Key))" />
+                                        }
+                                    </div>
+                                }
+                            </MudStack>
+                        </MudStack>
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
+                            <MudStack>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Style="color:#dc2626;"
+                                                 Class="trade-arrow" />
+
+                                        <MudAvatar Size="Size.Small" Class="trade-avatar"
+                                                   Style="@($"background-color:{AvatarColor}; color:#fff;")">
+                                            <MudIcon Icon="@Icons.Material.Filled.Person" />
+                                        </MudAvatar>
+                                    </MudStack>
+                                </MudStack>
+                            </MudStack>
+
+                            <MudStack Class="flex-grow-1" Spacing="1">
+                                @if (OfferedResourceEntries.Count == 0)
+                                {
+                                    <div class="trade-empty-slot">
+                                        <MudText Typo="Typo.body2">Clique em uma carta para movê-la para a troca.</MudText>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="trade-resource-row trade-resource-row--selected">
+                                        @foreach (var resource in OfferedResourceEntries)
+                                        {
+                                            <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value"
+                                                          OnClick="@(() => HandleSelectedResourceClick(resource.Key))" />
+                                        }
+                                    </div>
+                                }
+                            </MudStack>
                         </MudStack>
                     </MudStack>
-
-                    <MudStack Spacing="1">
-                        @if (AskedResourceEntries.Count == 0)
-                        {
-                            <div class="trade-empty-slot">
-                                <MudText Typo="Typo.body2">Clique em uma carta acima para pedi-la.</MudText>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="trade-resource-row trade-resource-row--selected">
-                                @foreach (var resource in AskedResourceEntries)
-                                {
-                                    <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value"
-                                                  OnClick="@(() => RemoveAskedResource(resource.Key))" />
-                                }
-                            </div>
-                        }
-                    </MudStack>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Style="color:#dc2626;" Class="trade-arrow" />
-
-                            <MudAvatar Size="Size.Small" Class="trade-avatar"
-                                       Style="@($"background-color:{AvatarColor}; color:#fff;")">
-                                <MudIcon Icon="@Icons.Material.Filled.Person" />
-                            </MudAvatar>
-
-                            <MudText Typo="Typo.subtitle2">Oferecendo</MudText>
+                    <MudStack>
+                        <MudStack AlignItems="AlignItems.Center">
+                            <MudTooltip Text="@BankTradeRatesTooltipText" Placement="Placement.Right">
+                                <MudIcon Icon="@Icons.Material.Filled.Storefront" Size="Size.Small" />
+                                <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                            </MudTooltip>
                         </MudStack>
-                    </MudStack>
 
-                    <MudStack Spacing="1">
-                        @if (OfferedResourceEntries.Count == 0)
-                        {
-                            <div class="trade-empty-slot">
-                                <MudText Typo="Typo.body2">Clique em uma carta para movê-la para a troca.</MudText>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="trade-resource-row trade-resource-row--selected">
-                                @foreach (var resource in OfferedResourceEntries)
-                                {
-                                    <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value"
-                                                  OnClick="@(() => HandleSelectedResourceClick(resource.Key))" />
-                                }
-                            </div>
-                        }
-                    </MudStack>
+                        <MudButton>
+                            <MudIcon Icon="@Icons.Material.Filled.SwapVert" Size="Size.Small" />
+                            <MudIcon Icon="@Icons.Material.Filled.Storefront" Size="Size.Small" />
+                        </MudButton>
 
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!CanOffer)" OnClick="HandleOffer">
-                        Oferecer troca
-                    </MudButton>
+                        <MudSpacer />
+
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!CanOffer)"
+                                   OnClick="HandleOffer">
+                            <MudIcon Icon="@Icons.Material.Filled.SwapVert" Size="Size.Small" />
+                            <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Small" />
+                        </MudButton>
+                    </MudStack>
                 </MudStack>
             }
         </MudStack>
@@ -118,18 +141,12 @@
     [Parameter]
     public EventCallback OnOffer { get; set; }
 
-    private string AvatarColor => Player.Cor.ToLowerInvariant() switch
-    {
-        "vermelho" => "#dc2626",
-        "azul" => "#2563eb",
-        "branco" => "#e2e8f0",
-        "laranja" => "#f97316",
-        _ => "#475569"
-    };
+    private string AvatarColor => PlayerColorUtils.ToHex(Player.Cor);
 
     private List<KeyValuePair<string, int>> AskedResourceEntries => BuildResourceEntries(AskedResources);
     private List<KeyValuePair<string, int>> OfferedResourceEntries => BuildResourceEntries(OfferedResources);
     private bool CanOffer => OfferedResourceEntries.Count > 0 && AskedResourceEntries.Count > 0 && OnOffer.HasDelegate;
+    private string BankTradeRatesTooltipText => BuildBankTradeRatesTooltipText();
 
     private async Task HandleClose()
     {
@@ -174,6 +191,38 @@
             })
             .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private string BuildBankTradeRatesTooltipText()
+    {
+        var rates = Player?.BankTradeRates;
+        if (rates is null || rates.Count == 0)
+        {
+            return "Banco: 4:1 para todos os recursos.";
+        }
+
+        var parts = ResourceOrder
+            .Select(resource =>
+            {
+                var rate = rates.GetValueOrDefault(resource, 4);
+                return $"{FormatResourceLabel(resource)} {rate}:1";
+            })
+            .ToList();
+
+        return $"Banco: {string.Join(", ", parts)}.";
+    }
+
+    private static string FormatResourceLabel(string resource)
+    {
+        return resource.ToLowerInvariant() switch
+        {
+            "madeira" => "Madeira",
+            "argila" => "Argila",
+            "ovelha" => "Ovelha",
+            "trigo" => "Trigo",
+            "pedra" => "Pedra",
+            _ => resource
+        };
     }
 
     private void AddAskedResource(string resourceType)

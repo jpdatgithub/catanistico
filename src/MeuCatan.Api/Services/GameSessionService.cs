@@ -21,9 +21,15 @@ public sealed class CatanGameSessionService : IGameSessionService
     ];
     private const int FixedPortSlotCount = 9;
     private const string SettlementBuildingType = "aldeia";
+    private const string CityBuildingType = "cidade";
     private const double HexRadius = 100.0;
     private const double VertexAdjacencyTolerance = 1.0;
     private static readonly TimeSpan TradeOfferLifetime = TimeSpan.FromSeconds(10);
+    private const int DefaultBankTradeRate = 4;
+    private const int GenericHarborTradeRate = 3;
+    private const int SpecificHarborTradeRate = 2;
+
+    private static readonly string[] TradableResources = ["madeira", "argila", "ovelha", "trigo", "pedra"];
 
     private static readonly (int X, int Y, int Z)[] OrderedOuterCoordinates =
     [
@@ -764,6 +770,62 @@ public sealed class CatanGameSessionService : IGameSessionService
         }
     }
 
+    private static Dictionary<string, int> ComputeBankTradeRatesForPlayer(CatanGameSessionState session, CatanPlayerState player)
+    {
+        var rates = TradableResources.ToDictionary(resource => resource, _ => DefaultBankTradeRate, StringComparer.OrdinalIgnoreCase);
+
+        var ownedVertices = session.Board.Vertices
+            .Where(vertex =>
+                vertex.OwnerPlayerId == player.UsuarioId &&
+                (string.Equals(vertex.BuildingType, SettlementBuildingType, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(vertex.BuildingType, CityBuildingType, StringComparison.OrdinalIgnoreCase)));
+
+        foreach (var vertex in ownedVertices)
+        {
+            foreach (var portType in vertex.Ports)
+            {
+                ApplyPortTradeRate(rates, portType);
+            }
+        }
+
+        return rates;
+    }
+
+    private static void ApplyPortTradeRate(Dictionary<string, int> rates, string? portType)
+    {
+        if (string.IsNullOrWhiteSpace(portType))
+        {
+            return;
+        }
+
+        switch (portType.Trim().ToLowerInvariant())
+        {
+            case "generic_3to1":
+                foreach (var resource in TradableResources)
+                {
+                    rates[resource] = Math.Min(rates[resource], GenericHarborTradeRate);
+                }
+                return;
+            case "wood_2to1":
+                rates["madeira"] = Math.Min(rates["madeira"], SpecificHarborTradeRate);
+                return;
+            case "brick_2to1":
+                rates["argila"] = Math.Min(rates["argila"], SpecificHarborTradeRate);
+                return;
+            case "sheep_2to1":
+                rates["ovelha"] = Math.Min(rates["ovelha"], SpecificHarborTradeRate);
+                return;
+            case "wheat_2to1":
+                rates["trigo"] = Math.Min(rates["trigo"], SpecificHarborTradeRate);
+                return;
+            case "ore_2to1":
+                rates["pedra"] = Math.Min(rates["pedra"], SpecificHarborTradeRate);
+                return;
+            default:
+                return;
+        }
+    }
+
     private static GameSessionResponse ToResponse(CatanGameSessionState session, int usuarioId)
     {
         var currentPlayer = session.Players.First(player => player.UsuarioId == session.CurrentPlayerId);
@@ -816,7 +878,8 @@ public sealed class CatanGameSessionService : IGameSessionService
                     RemainingRoads = player.RemainingRoads,
                     RemainingSettlements = player.RemainingSettlements,
                     RemainingCities = player.RemainingCities,
-                    Resources = new Dictionary<string, int>(player.Resources)
+                    Resources = new Dictionary<string, int>(player.Resources),
+                    BankTradeRates = ComputeBankTradeRatesForPlayer(session, player)
                 })
                 .ToList(),
             CatanState = new CatanGameStateResponse
