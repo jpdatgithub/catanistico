@@ -55,22 +55,13 @@
                             </MudStack>
 
                             <MudStack Class="flex-grow-1" Spacing="1">
-                                @if (OfferedResourceEntries.Count == 0)
-                                {
-                                    <div class="trade-empty-slot">
-                                        <MudText Typo="Typo.body2">Clique em uma carta para movê-la para a troca.</MudText>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="trade-resource-row trade-resource-row--selected">
-                                        @foreach (var resource in OfferedResourceEntries)
-                                        {
-                                            <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value"
-                                                          OnClick="@(() => HandleSelectedResourceClick(resource.Key))" />
-                                        }
-                                    </div>
-                                }
+                                <div class="trade-resource-row trade-resource-row--selected">
+                                    @foreach (var resource in OfferedResourceEntries)
+                                    {
+                                        <ResourceCard Token=true ResourceType="@resource.Key" Count="@resource.Value"
+                                                      OnClick="@(() => HandleSelectedResourceClick(resource.Key))" />
+                                    }
+                                </div>
                             </MudStack>
                         </MudStack>
                     </MudStack>
@@ -96,7 +87,8 @@
                             </MudTooltip>
                         </MudStack>
 
-                        <MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" Disabled="@(!CanBankTrade)"
+                                   OnClick="HandleBankTrade">
                             <MudIcon Icon="@Icons.Material.Filled.SwapVert" Size="Size.Small" />
                             <MudIcon Icon="@Icons.Material.Filled.Storefront" Size="Size.Small" />
                         </MudButton>
@@ -135,6 +127,9 @@
     public IReadOnlyDictionary<string, int> OfferedResources { get; set; } = new Dictionary<string, int>();
 
     [Parameter]
+    public BankStateResponse? Bank { get; set; }
+
+    [Parameter]
     public Dictionary<string, int> AskedResources { get; set; } = new Dictionary<string, int>();
 
     [Parameter]
@@ -146,11 +141,15 @@
     [Parameter]
     public EventCallback OnOffer { get; set; }
 
+    [Parameter]
+    public EventCallback OnBankTrade { get; set; }
+
     private string AvatarColor => PlayerColorUtils.ToHex(Player.Cor);
 
     private List<KeyValuePair<string, int>> AskedResourceEntries => BuildResourceEntries(AskedResources);
     private List<KeyValuePair<string, int>> OfferedResourceEntries => BuildResourceEntries(OfferedResources);
     private bool CanOffer => OfferedResourceEntries.Count > 0 && AskedResourceEntries.Count > 0 && OnOffer.HasDelegate;
+    private bool CanBankTrade => OnBankTrade.HasDelegate && IsBankTradeDraftValid();
 
     private async Task HandleClose()
     {
@@ -182,6 +181,16 @@
         await OnOffer.InvokeAsync();
     }
 
+    private async Task HandleBankTrade()
+    {
+        if (!CanBankTrade)
+        {
+            return;
+        }
+
+        await OnBankTrade.InvokeAsync();
+    }
+
     private static List<KeyValuePair<string, int>> BuildResourceEntries(IReadOnlyDictionary<string, int>? resources)
     {
         var source = resources ?? new Dictionary<string, int>();
@@ -206,6 +215,62 @@
         }
 
         return rates.GetValueOrDefault(resourceType, 4);
+    }
+
+    private bool IsBankTradeDraftValid()
+    {
+        if (Player is null || Bank is null)
+        {
+            return false;
+        }
+
+        if (OfferedResourceEntries.Count == 0 || AskedResourceEntries.Count == 0)
+        {
+            return false;
+        }
+
+        var offeredTradeUnits = 0;
+
+        foreach (var offered in OfferedResourceEntries)
+        {
+            var rate = GetBankTradeRate(offered.Key);
+            if (rate <= 0 || offered.Value <= 0 || offered.Value % rate != 0)
+            {
+                return false;
+            }
+
+            var playerAmount = Player.Resources.GetValueOrDefault(offered.Key);
+            if (offered.Value > playerAmount)
+            {
+                return false;
+            }
+
+            offeredTradeUnits += offered.Value / rate;
+        }
+
+        if (offeredTradeUnits <= 0)
+        {
+            return false;
+        }
+
+        var askedTradeUnits = 0;
+        foreach (var asked in AskedResourceEntries)
+        {
+            if (asked.Value <= 0)
+            {
+                return false;
+            }
+
+            askedTradeUnits += asked.Value;
+
+            var bankAmount = Bank.ResourceCounts.GetValueOrDefault(asked.Key);
+            if (asked.Value > bankAmount)
+            {
+                return false;
+            }
+        }
+
+        return askedTradeUnits == offeredTradeUnits;
     }
 
     private void AddAskedResource(string resourceType)

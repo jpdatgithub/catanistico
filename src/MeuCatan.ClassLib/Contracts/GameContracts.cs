@@ -14,6 +14,7 @@ public static class GameActionTypes
     public const string RollDice = "roll-dice";
     public const string EndTurn = "end-turn";
     public const string OfferTrade = "offer-trade";
+    public const string TradeWithBank = "trade-with-bank";
     public const string AcceptTrade = "accept-trade";
     public const string DeclineTrade = "decline-trade";
     public const string EditTrade = "edit-trade";

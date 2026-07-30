@@ -49,9 +49,10 @@
                             @if (currentPlayer is not null && _isTradeOpen)
                             {
                                 <ResourceTradePanel Player="currentPlayer" IsOpen="true"
-                                                    OfferedResources="_selectedTradeResources" AskedResources="_askedTradeResources"
-                                                    OnClose="FecharInterfaceTrocaAsync" OnSelectedResourceClicked="RemoverRecursoDaTrocaAsync"
-                                                    OnOffer="ExecutarOfertaTrocaAsync" />
+                                                    OfferedResources="_selectedTradeResources" Bank="_session.CatanState?.Bank"
+                                                    AskedResources="_askedTradeResources" OnClose="FecharInterfaceTrocaAsync"
+                                                    OnSelectedResourceClicked="RemoverRecursoDaTrocaAsync" OnOffer="ExecutarOfertaTrocaAsync"
+                                                    OnBankTrade="ExecutarTrocaBancoAsync" />
                             }
 
                             <OfferViewPanelStack Offers="OfertasAtivas" ViewerColor="@currentPlayer?.Cor" />
@@ -365,6 +366,39 @@ StringComparison.OrdinalIgnoreCase)
 
         AtualizarSessionState(result.Data);
         await FecharInterfaceTrocaAsync();
+        HabilitarPollingRapidoTemporario();
+    }
+
+    private async Task ExecutarTrocaBancoAsync()
+    {
+        if (!PodeInteragirComRecursos || _session is null || _carregando
+            || _selectedTradeResources.Count == 0 || _askedTradeResources.Count == 0)
+        {
+            return;
+        }
+
+        _acaoErro = null;
+        _carregando = true;
+
+        var result = await AuthService.ExecutarAcaoJogoAsync(SalaId, new GameActionRequest
+        {
+            ActionType = GameActionTypes.TradeWithBank,
+            OfferedResources = new Dictionary<string, int>(_selectedTradeResources, StringComparer.OrdinalIgnoreCase),
+            AskedResources = new Dictionary<string, int>(_askedTradeResources, StringComparer.OrdinalIgnoreCase)
+        });
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _acaoErro = result.ErrorMessage ?? "Não foi possível trocar com o banco.";
+            return;
+        }
+
+        AtualizarSessionState(result.Data);
+        _selectedTradeResources.Clear();
+        _askedTradeResources.Clear();
+        await InvokeAsync(StateHasChanged);
         HabilitarPollingRapidoTemporario();
     }
 

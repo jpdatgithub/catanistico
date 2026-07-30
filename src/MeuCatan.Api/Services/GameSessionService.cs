@@ -227,6 +227,19 @@ public sealed class CatanGameSessionService : IGameSessionService
                     return offerTradeResult;
                 }
             }
+            else if (string.Equals(request.ActionType, GameActionTypes.TradeWithBank, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno || !session.HasRolledDiceThisTurn)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode trocar com o banco após rolar os dados.");
+                }
+
+                var bankTradeResult = TryTradeWithBank(session, actingPlayer, request);
+                if (bankTradeResult is not null)
+                {
+                    return bankTradeResult;
+                }
+            }
             else
             {
                 return LobbyOperationResult<GameSessionResponse>.Validation("Tipo de ação não suportado.");
@@ -451,6 +464,93 @@ public sealed class CatanGameSessionService : IGameSessionService
             CreatedAtUtc = createdAtUtc,
             ExpiresAtUtc = createdAtUtc.Add(TradeOfferLifetime)
         });
+
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryTradeWithBank(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        GameActionRequest request)
+    {
+        var offeredResources = NormalizeTradeResources(request.OfferedResources);
+        var askedResources = NormalizeTradeResources(request.AskedResources);
+
+        if (offeredResources.Count == 0 || askedResources.Count == 0)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("A troca com o banco precisa ter recursos oferecidos e pedidos.");
+        }
+
+        var rates = ComputeBankTradeRatesForPlayer(session, actingPlayer);
+        var offeredTradeUnits = 0;
+
+        foreach (var offeredResource in offeredResources)
+        {
+            if (!rates.TryGetValue(offeredResource.Key, out var tradeRate))
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("A troca contém um recurso inválido.");
+            }
+
+            var availableAmount = actingPlayer.Resources.GetValueOrDefault(offeredResource.Key);
+            if (offeredResource.Value > availableAmount)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui recursos suficientes para trocar com o banco.");
+            }
+
+            if (tradeRate <= 0 || offeredResource.Value % tradeRate != 0)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("As quantidades oferecidas não respeitam as taxas de troca do banco.");
+            }
+
+            offeredTradeUnits += offeredResource.Value / tradeRate;
+        }
+
+        if (offeredTradeUnits <= 0)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("A troca com o banco precisa gerar pelo menos um crédito de troca.");
+        }
+
+        EnsureBankInitialized(session);
+
+        var askedTradeUnits = 0;
+        foreach (var askedResource in askedResources)
+        {
+            if (!TradableResources.Contains(askedResource.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("A troca contém um recurso inválido.");
+            }
+
+            askedTradeUnits += askedResource.Value;
+
+            var bankAmount = session.Bank.ResourceCounts.GetValueOrDefault(askedResource.Key);
+            if (askedResource.Value > bankAmount)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("O banco não possui recursos suficientes para essa troca.");
+            }
+        }
+
+        if (askedTradeUnits != offeredTradeUnits)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("A troca precisa respeitar exatamente as taxas do banco.");
+        }
+
+        foreach (var offeredResource in offeredResources)
+        {
+            actingPlayer.Resources.TryGetValue(offeredResource.Key, out var currentAmount);
+            actingPlayer.Resources[offeredResource.Key] = currentAmount - offeredResource.Value;
+            ReturnToBank(session, offeredResource.Key, offeredResource.Value);
+        }
+
+        foreach (var askedResource in askedResources)
+        {
+            if (!TryWithdrawFromBank(session, askedResource.Key, askedResource.Value))
+            {
+                return LobbyOperationResult<GameSessionResponse>.Conflict("Falha ao retirar recursos do banco para concluir a troca.");
+            }
+
+            actingPlayer.Resources.TryGetValue(askedResource.Key, out var currentAmount);
+            actingPlayer.Resources[askedResource.Key] = currentAmount + askedResource.Value;
+        }
 
         return null;
     }
@@ -933,6 +1033,7 @@ public sealed class CatanGameSessionService : IGameSessionService
         var isTurnPhase = session.Phase == GameTipoFase.Turno;
         var canRollDice = isTurnPhase && canCurrentUserAct && !session.HasRolledDiceThisTurn;
         var canEndTurn = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn;
+        var canTradeWithBank = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn;
 
         var availableActions = new List<string>();
         if (canPlaceInitialSettlement)
@@ -950,6 +1051,10 @@ public sealed class CatanGameSessionService : IGameSessionService
         if (canEndTurn)
         {
             availableActions.Add(GameActionTypes.EndTurn);
+        }
+        if (canTradeWithBank)
+        {
+            availableActions.Add(GameActionTypes.TradeWithBank);
         }
 
         var result = new GameSessionResponse
