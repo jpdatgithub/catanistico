@@ -129,64 +129,57 @@
                             <MudPaper Class="pa-4">
                                 <MudText Typo="Typo.h6">Histórico do jogo</MudText>
 
-                                @if (_session.CatanState?.RollHistory.Count == 0)
-                                {
-                                    <MudText Typo="Typo.body2" Class="mt-2">Ainda não houve rodadas registradas.</MudText>
-                                }
-                                else
-                                {
-                                    <div class="mt-2 history-chat-list">
-                                        @foreach (var entrada in Enumerable.Reverse(_session.CatanState!.RollHistory))
-                                        {
-                                            <div class="history-chat-line">
-                                                @{
-                                                    var turnPlayerColor = PlayerColorUtils.ToHex(
-                                                        _session.Players.FirstOrDefault(p => p.UsuarioId == entrada.CurrentTurnPlayerId)?.Cor
-                                                        ?? string.Empty);
-                                                }
+                                <div class="mt-2 history-chat-list">
+                                    @foreach (var entrada in Enumerable.Reverse(_session.CatanState!.RollHistory))
+                                    {
+                                        <div class="history-chat-line">
+                                            @{
+                                                var turnPlayerColor = PlayerColorUtils.ToHex(
+                                                    _session.Players.FirstOrDefault(p => p.UsuarioId == entrada.CurrentTurnPlayerId)?.Cor
+                                                    ?? string.Empty);
+                                            }
 
-                                                <MudAvatar Size="Size.Small" Class="history-player-avatar"
-                                                           Style="@($"background-color:{turnPlayerColor}; color:#fff;")">
-                                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
-                                                </MudAvatar>
+                                            <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                                                       Style="@($"background-color:{turnPlayerColor}; color:#fff;")">
+                                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                            </MudAvatar>
 
-                                                <span class="history-dice-inline">
-                                                    <DiceFace Value="@entrada.Dice1" Size="18" />
-                                                    <DiceFace Value="@entrada.Dice2" Size="18" />
-                                                </span>
+                                            <span class="history-dice-inline">
+                                                <DiceFace Value="@entrada.Dice1" Size="18" />
+                                                <DiceFace Value="@entrada.Dice2" Size="18" />
+                                            </span>
 
-                                                @if (entrada.Total == 7)
+                                            @if (entrada.Total == 7)
+                                            {
+                                                <span class="history-caption">• saiu 7, sem recursos</span>
+                                            }
+                                            else if (entrada.ResourceGains.Count == 0)
+                                            {
+                                                <span class="history-caption">• sem ganhos</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="history-caption">•</span>
+                                                @foreach (var ganho in entrada.ResourceGains)
                                                 {
-                                                    <span class="history-caption">• saiu 7, sem recursos</span>
-                                                }
-                                                else if (entrada.ResourceGains.Count == 0)
-                                                {
-                                                    <span class="history-caption">• sem ganhos</span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="history-caption">•</span>
-                                                    @foreach (var ganho in entrada.ResourceGains)
+                                                    var avatarColor = PlayerColorUtils.ToHex(_session.Players.FirstOrDefault(p =>
+                                                    p.UsuarioId == ganho.UsuarioId)?.Cor ?? string.Empty);
+                                                    <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                                                               Style="@($"background-color:{avatarColor}; color:#fff;")">
+                                                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                                    </MudAvatar>
+
+                                                    @for (var i = 0; i < ganho.Amount; i++)
                                                     {
-                                                        var avatarColor = PlayerColorUtils.ToHex(_session.Players.FirstOrDefault(p =>
-                                p.UsuarioId == ganho.UsuarioId)?.Cor ?? string.Empty);
-                                                        <MudAvatar Size="Size.Small" Class="history-player-avatar"
-                                                                   Style="@($"background-color:{avatarColor}; color:#fff;")">
-                                                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
-                                                        </MudAvatar>
-
-                                                        @for (var i = 0; i < ganho.Amount; i++)
-                                                        {
-                                                            <span class="history-resource-token">
-                                                                <ResourceTokenIcon ResourceType="@ganho.ResourceType" />
-                                                            </span>
-                                                        }
+                                                        <span class="history-resource-token">
+                                                            <ResourceTokenIcon ResourceType="@ganho.ResourceType" />
+                                                        </span>
                                                     }
                                                 }
-                                            </div>
-                                        }
-                                    </div>
-                                }
+                                            }
+                                        </div>
+                                    }
+                                </div>
                             </MudPaper>
 
                             <GameChatPanel SalaId="@SalaId" />

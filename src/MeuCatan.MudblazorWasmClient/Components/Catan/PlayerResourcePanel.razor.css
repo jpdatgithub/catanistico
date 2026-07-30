@@ -1,5 +1,9 @@
 .resource-panel {
     border: 1px solid var(--mud-palette-lines-default);
+    /* Altura de uma carta (96px) + padding vertical do pa-4 (2 x 16px),
+       para o painel não encolher quando não houver cartas. */
+    min-height: 128px;
+    box-sizing: border-box;
 }
 
 .resource-hand-row {
@@ -7,6 +11,7 @@
     flex-wrap: wrap;
     align-items: flex-start;
     gap: 12px;
+    min-height: 96px;
 }
 
 @media (max-width: 960px) {
