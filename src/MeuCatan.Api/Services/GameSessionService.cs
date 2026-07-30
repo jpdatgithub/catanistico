@@ -67,6 +67,7 @@ public sealed class CatanGameSessionService : IGameSessionService
             var existingSession = store.GetSessionOrDefault(roomContext.SalaId);
             if (existingSession is not null)
             {
+                EnsureBankInitialized(existingSession);
                 return LobbyOperationResult<GameSessionResponse>.Ok(ToResponse(existingSession, roomContext.CriadorId));
             }
 
@@ -94,6 +95,7 @@ public sealed class CatanGameSessionService : IGameSessionService
                         Resources = new Dictionary<string, int>()
                     })
                     .ToList(),
+                Bank = CatanBankState.CreateDefault(),
                 Board = Create34TraditionalBoardState()
             };
 
@@ -119,6 +121,8 @@ public sealed class CatanGameSessionService : IGameSessionService
             {
                 return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não participa desta sessão.");
             }
+
+            EnsureBankInitialized(session);
 
             if (RemoveExpiredTradeOffers(session, DateTime.UtcNow))
             {
@@ -148,6 +152,8 @@ public sealed class CatanGameSessionService : IGameSessionService
             {
                 return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não participa desta sessão.");
             }
+
+            EnsureBankInitialized(session);
 
             RemoveExpiredTradeOffers(session, DateTime.UtcNow);
 
@@ -276,7 +282,7 @@ public sealed class CatanGameSessionService : IGameSessionService
 
         if (IsSecondSetupSettlementPlacement(session))
         {
-            GrantSetupResourcesFromVertex(actingPlayer, vertex);
+            GrantSetupResourcesFromVertex(session, actingPlayer, vertex);
         }
 
         return null;
@@ -465,10 +471,61 @@ public sealed class CatanGameSessionService : IGameSessionService
         return session.ActiveTradeOffers.RemoveAll(offer => offer.ExpiresAtUtc <= nowUtc) > 0;
     }
 
+    private static void EnsureBankInitialized(CatanGameSessionState session)
+    {
+        session.Bank ??= CatanBankState.CreateDefault();
+
+        session.Bank.ResourceCounts ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var resource in TradableResources)
+        {
+            if (!session.Bank.ResourceCounts.ContainsKey(resource))
+            {
+                session.Bank.ResourceCounts[resource] = CatanBankState.InitialResourceCountPerType;
+            }
+        }
+
+        if (session.Bank.DevelopmentCardCount < 0)
+        {
+            session.Bank.DevelopmentCardCount = 0;
+        }
+    }
+
+    private static bool TryWithdrawFromBank(CatanGameSessionState session, string resourceType, int amount = 1)
+    {
+        if (string.IsNullOrWhiteSpace(resourceType) || amount <= 0)
+        {
+            return false;
+        }
+
+        EnsureBankInitialized(session);
+
+        if (!session.Bank.ResourceCounts.TryGetValue(resourceType, out var currentAmount) || currentAmount < amount)
+        {
+            return false;
+        }
+
+        session.Bank.ResourceCounts[resourceType] = currentAmount - amount;
+        return true;
+    }
+
+    private static void ReturnToBank(CatanGameSessionState session, string resourceType, int amount = 1)
+    {
+        if (string.IsNullOrWhiteSpace(resourceType) || amount <= 0)
+        {
+            return;
+        }
+
+        EnsureBankInitialized(session);
+        session.Bank.ResourceCounts.TryGetValue(resourceType, out var currentAmount);
+        session.Bank.ResourceCounts[resourceType] = currentAmount + amount;
+    }
+
     private static void DistributeResourcesForRoll(CatanGameSessionState session, int rolledTotal)
     {
         var playersById = session.Players.ToDictionary(player => player.UsuarioId);
         var gainsByPlayerAndResource = new Dictionary<(int UsuarioId, string ResourceType), int>();
+
+        EnsureBankInitialized(session);
 
         var producingTiles = session.Board.Tiles.Where(tile =>
             tile.NumberToken == rolledTotal &&
@@ -485,6 +542,11 @@ public sealed class CatanGameSessionService : IGameSessionService
                 }
 
                 if (!playersById.TryGetValue(vertex.OwnerPlayerId.Value, out var owner))
+                {
+                    continue;
+                }
+
+                if (!TryWithdrawFromBank(session, tile.ResourceType))
                 {
                     continue;
                 }
@@ -534,12 +596,19 @@ public sealed class CatanGameSessionService : IGameSessionService
         return session.SetupStepIndex >= secondPlacementStart;
     }
 
-    private static void GrantSetupResourcesFromVertex(CatanPlayerState player, CatanVertexState vertex)
+    private static void GrantSetupResourcesFromVertex(CatanGameSessionState session, CatanPlayerState player, CatanVertexState vertex)
     {
+        EnsureBankInitialized(session);
+
         foreach (var resourceType in vertex.Resources)
         {
             if (string.IsNullOrWhiteSpace(resourceType)
                 || string.Equals(resourceType, DesertResourceType, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!TryWithdrawFromBank(session, resourceType))
             {
                 continue;
             }
@@ -852,6 +921,8 @@ public sealed class CatanGameSessionService : IGameSessionService
 
     private static GameSessionResponse ToResponse(CatanGameSessionState session, int usuarioId)
     {
+        EnsureBankInitialized(session);
+
         var currentPlayer = session.Players.First(player => player.UsuarioId == session.CurrentPlayerId);
         var canCurrentUserAct = currentPlayer.UsuarioId == usuarioId;
         var isSetupPhase = session.Phase == GameTipoFase.SetupInicial;
@@ -919,6 +990,11 @@ public sealed class CatanGameSessionService : IGameSessionService
                 LastDiceTotal = session.LastDice1 is not null && session.LastDice2 is not null
                     ? session.LastDice1 + session.LastDice2
                     : null,
+                Bank = new BankStateResponse
+                {
+                    ResourceCounts = new Dictionary<string, int>(session.Bank.ResourceCounts, StringComparer.OrdinalIgnoreCase),
+                    DevelopmentCardCount = session.Bank.DevelopmentCardCount
+                },
                 LastRollResourceGains = session.LastRollResourceGains
                     .Select(gain => new GameResourceGainResponse
                     {

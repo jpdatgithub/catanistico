@@ -1,0 +1,50 @@
+.bank-items {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 16px;
+}
+
+.bank-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.bank-coin-stack {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 42px;
+}
+
+.bank-coin-layer {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 34px;
+    height: 34px;
+    font-size: 34px;
+}
+
+/* A última moeda renderizada fica na frente (embaixo);
+   as anteriores espiam por trás, deslocadas para cima/direita. */
+.bank-coin-layer:nth-last-child(2) {
+    transform: translate(3px, -4px);
+}
+
+.bank-coin-layer:nth-last-child(3) {
+    transform: translate(6px, -8px);
+}
+
+.bank-coin-layer ::deep .resource-token-icon {
+    width: 100%;
+    height: 100%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.bank-count {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1;
+}

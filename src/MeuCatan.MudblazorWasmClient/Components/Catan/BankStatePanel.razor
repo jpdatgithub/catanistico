@@ -1,0 +1,73 @@
+@if (Bank is not null)
+{
+    <MudPaper Class="pa-4 bank-state-panel">
+        <MudText Typo="Typo.h6">Estado do banco</MudText>
+
+        <div class="bank-items mt-2">
+            @foreach (var resourceType in ResourceOrder)
+            {
+                var count = GetResourceCount(resourceType);
+                <div class="bank-item">
+                    <span class="bank-coin-stack">
+                        @for (var layer = 0; layer < GetStackLayers(count, ResourceTotal); layer++)
+                        {
+                            <span class="bank-coin-layer">
+                                <ResourceTokenIcon ResourceType="@resourceType" />
+                            </span>
+                        }
+                    </span>
+                    <span class="bank-count">@count</span>
+                </div>
+            }
+
+            <div class="bank-item">
+                <span class="bank-coin-stack">
+                    @for (var layer = 0; layer < GetStackLayers(Bank.DevelopmentCardCount, DevelopmentTotal); layer++)
+                    {
+                        <span class="bank-coin-layer">
+                            <ResourceTokenIcon ResourceType="desenvolvimento" />
+                        </span>
+                    }
+                </span>
+                <span class="bank-count">@Bank.DevelopmentCardCount</span>
+            </div>
+        </div>
+    </MudPaper>
+}
+
+@code {
+    private static readonly string[] ResourceOrder = ["madeira", "argila", "ovelha", "trigo", "pedra"];
+
+    private const int ResourceTotal = 19;
+    private const int DevelopmentTotal = 25;
+
+    [Parameter]
+    public BankStateResponse? Bank { get; set; }
+
+    private int GetResourceCount(string resourceType)
+    {
+        if (Bank?.ResourceCounts is null)
+        {
+            return 0;
+        }
+
+        return Bank.ResourceCounts.TryGetValue(resourceType, out var count)
+            ? Math.Max(0, count)
+            : 0;
+    }
+
+    private static int GetStackLayers(int count, int total)
+    {
+        if (total <= 0 || count <= 0)
+        {
+            return 1;
+        }
+
+        if (count * 3 > total * 2)
+        {
+            return 3;
+        }
+
+        return count * 3 > total ? 2 : 1;
+    }
+}

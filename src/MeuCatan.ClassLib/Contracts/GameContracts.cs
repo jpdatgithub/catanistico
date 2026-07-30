@@ -97,6 +97,7 @@ public class CatanGameStateResponse
     public int? LastDice1 { get; set; }
     public int? LastDice2 { get; set; }
     public int? LastDiceTotal { get; set; }
+    public BankStateResponse? Bank { get; set; }
     public List<GameResourceGainResponse> LastRollResourceGains { get; set; } = [];
     public List<RollHistoryEntryResponse> RollHistory { get; set; } = [];
     public int? RobberTileId { get; set; }
@@ -106,6 +107,12 @@ public class CatanGameStateResponse
     public List<CatanEdgeResponse> Edges { get; set; } = [];
     public int width { get; set; }
     public int height { get; set; }
+}
+
+public class BankStateResponse
+{
+    public Dictionary<string, int> ResourceCounts { get; set; } = [];
+    public int DevelopmentCardCount { get; set; }
 }
 
 public class GameResourceGainResponse

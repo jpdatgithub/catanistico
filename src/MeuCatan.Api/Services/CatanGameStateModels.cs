@@ -22,7 +22,33 @@ public sealed class CatanGameSessionState
     public long NextTradeOfferId { get; set; } = 1;
     public List<CatanTradeOfferState> ActiveTradeOffers { get; set; } = [];
     public List<CatanPlayerState> Players { get; set; } = [];
+    public CatanBankState Bank { get; set; } = CatanBankState.CreateDefault();
     public CatanBoardState Board { get; set; } = new();
+}
+
+public sealed class CatanBankState
+{
+    public const int InitialResourceCountPerType = 19;
+    public const int InitialDevelopmentCardCount = 25;
+
+    public Dictionary<string, int> ResourceCounts { get; set; } = [];
+    public int DevelopmentCardCount { get; set; } = InitialDevelopmentCardCount;
+
+    public static CatanBankState CreateDefault()
+    {
+        return new CatanBankState
+        {
+            ResourceCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["madeira"] = InitialResourceCountPerType,
+                ["argila"] = InitialResourceCountPerType,
+                ["ovelha"] = InitialResourceCountPerType,
+                ["trigo"] = InitialResourceCountPerType,
+                ["pedra"] = InitialResourceCountPerType
+            },
+            DevelopmentCardCount = InitialDevelopmentCardCount
+        };
+    }
 }
 
 public sealed class CatanTradeOfferState
