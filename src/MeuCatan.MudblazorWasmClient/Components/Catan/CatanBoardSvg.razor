@@ -15,6 +15,7 @@ else
          @onmousemove="OnMouseMove" @onmouseup="OnMouseUp" @onmouseleave="OnMouseUp">
         <svg width="100%" height="100%" class="catan-board-svg" role="img" aria-label="Tabuleiro do Catan"
              style="display:block;" @onwheel="OnWheel" @onwheel:preventDefault @onmousedown="OnMouseDown">
+            <TerrainPatterns />
             <defs>
                 <linearGradient id="seaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop offset="0%" stop-color="#7dd3fc" />
@@ -52,8 +53,8 @@ else
             <g transform="@transform">
                 @foreach (var tile in model.Tiles)
                 {
-                    <polygon points="@tile.Points" fill="@tile.Fill" fill-opacity="0.97" stroke="#5b4a3f" stroke-width="1.8"
-                             filter="url(#tileShadow)" />
+                    <polygon points="@tile.Points" fill="url(#@GetPatternName(tile.ResourceType))" fill-opacity="0.97"
+                             stroke="#5b4a3f" stroke-width="1.8" filter="url(#tileShadow)" />
                     <polygon points="@tile.Points" fill="url(#tileDefaultGradient)" stroke="none" pointer-events="none" />
 
                     if (tile.NumberToken != 7)
@@ -80,14 +81,8 @@ else
 
                 @foreach (var port in model.Ports)
                 {
-                    <line x1="@F(port.AnchorX)" y1="@F(port.AnchorY)" x2="@F(port.X)" y2="@F(port.Y)" stroke="#0f172a"
-                          stroke-width="2" stroke-opacity="0.40" pointer-events="none" />
-                    <rect x="@F(port.X - 28)" y="@F(port.Y - 12)" width="56" height="24" rx="7" fill="#ecfeff"
-                          fill-opacity="0.90" stroke="#0369a1" stroke-width="1.3" pointer-events="none" />
-                    <svg:text x="@F(port.X)" y="@F(port.Y)" text-anchor="middle" font-size="9.5" font-weight="700"
-                              fill="#0f172a" dominant-baseline="middle" pointer-events="none">
-                        @port.Label
-                    </svg:text>
+                    <PortMarker VertexAX="@port.AnchorX" VertexAY="@port.AnchorY" VertexBX="@port.X" VertexBY="@port.Y"
+                                Label="@port.Label" />
                 }
 
                 @foreach (var edge in model.Edges)
@@ -123,13 +118,8 @@ else
                 {
                     if (IsVillage(vertex))
                     {
-                        <g class="village-marker" transform="translate(@F(vertex.X),@F(vertex.Y))" pointer-events="none">
-                            <polygon points="-21,9 0,-18 21,9" fill="@GetVillageRoofColor(vertex.OwnerPlayerId)" stroke="#3f2b1d"
-                                     stroke-width="1.1" />
-                            <rect x="-18" y="9" width="36" height="24" rx="4.2" fill="@GetVillageBodyColor(vertex.OwnerPlayerId)"
-                                  stroke="#3f2b1d" stroke-width="1.1" />
-                            <rect x="-4.2" y="18" width="8.4" height="13.8" rx="2.4" fill="#fef3c7" fill-opacity="0.95" />
-                        </g>
+                        <VillageMarker X="@vertex.X" Y="@vertex.Y" roofColor="@GetVillageRoofColor(vertex.OwnerPlayerId)"
+                                       bodyColor="@GetVillageBodyColor(vertex.OwnerPlayerId)" />
                     }
                 }
             </g>
@@ -316,6 +306,17 @@ else
 
         return "#475569";
     }
+
+    private string GetPatternName(string resourceType) => resourceType switch
+    {
+        "madeira" => "forestPattern",
+        "argila" => "clayPattern",
+        "ovelha" => "sheepPattern",
+        "trigo" => "wheatPattern",
+        "pedra" => "mountainPattern",
+        "deserto" => "desertPattern",
+        _ => "unknownPattern"
+    };
 
     private record ElementBounds(double Width, double Height);
 }

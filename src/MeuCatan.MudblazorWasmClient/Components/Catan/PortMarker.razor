@@ -1,0 +1,125 @@
+@namespace MeuCatan.MudblazorWasmClient.Components.Catan
+
+<g>
+
+    <!-- píer conectado à costa -->
+    <line x1="@F(VertexAX)" y1="@F(VertexAY)" x2="@F(VertexBX)" y2="@F(VertexBY)" stroke="#8b5a2b" stroke-width="12"
+          stroke-linecap="round" opacity="0.95" />
+
+
+    <!-- detalhes das tábuas -->
+    <line x1="@F(MidX)" y1="@F(MidY)" x2="@F(SeaX)" y2="@F(SeaY)" stroke="#c08a52" stroke-width="8"
+          stroke-linecap="round" />
+
+
+    <!-- continuação do píer para o mar -->
+    <line x1="@F(MidX)" y1="@F(MidY)" x2="@F(SeaX)" y2="@F(SeaY)" stroke="#8b5a2b" stroke-width="10"
+          stroke-linecap="round" />
+
+
+    <!-- barco no final -->
+    <g transform="translate(@F(SeaX),@F(SeaY)) rotate(@BoatRotation)">
+
+        <path d="
+        M-18 0
+        L18 0
+        L10 10
+        L-10 10
+        Z" fill="#7c3f25" stroke="#4b2e1c" stroke-width="1.2" />
+
+        <line x1="0" y1="0" x2="0" y2="-22" stroke="#5b4636" stroke-width="1.5" />
+
+        <polygon points="0,-20 15,-10 0,-10" fill="#fff7df" />
+
+    </g>
+
+
+    <!-- label sempre no mar -->
+    <g transform="translate(@F(LabelX),@F(LabelY))">
+
+        <rect x="-30" y="-12" width="60" height="24" rx="8" fill="#ecfeff" stroke="#0369a1" stroke-width="1.3" />
+
+        <text x="0" y="1" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700"
+              fill="#0f172a">
+            @Label
+        </text>
+
+    </g>
+
+</g>
+
+
+@code {
+
+    [Parameter] public double VertexAX { get; set; }
+    [Parameter] public double VertexAY { get; set; }
+
+    [Parameter] public double VertexBX { get; set; }
+    [Parameter] public double VertexBY { get; set; }
+
+
+    [Parameter]
+    public string Label { get; set; } = "3:1";
+
+
+    private const double PierLength = 45;
+
+
+    private double MidX => (VertexAX + VertexBX) / 2;
+    private double MidY => (VertexAY + VertexBY) / 2;
+
+
+    /*
+        Direção da borda da ilha
+    */
+    private double EdgeX => VertexBX - VertexAX;
+    private double EdgeY => VertexBY - VertexAY;
+
+
+    /*
+        Normal da borda
+    */
+    private double NormalX => -EdgeY;
+    private double NormalY => EdgeX;
+
+
+    private double NormalLength =>
+        Math.Sqrt(NormalX * NormalX + NormalY * NormalY);
+
+
+    private double SeaX =>
+        MidX + NormalX / NormalLength * PierLength;
+
+
+    private double SeaY =>
+        MidY + NormalY / NormalLength * PierLength;
+
+
+
+    private double LabelX => SeaX;
+    private double LabelY => SeaY + 25;
+
+
+    private double BoatRotation
+    {
+        get
+        {
+            var angle =
+                Math.Atan2(
+                    NormalY,
+                    NormalX
+                ) * 180 / Math.PI;
+
+            if (angle > 90 || angle < -90)
+                angle += 180;
+
+            return angle;
+        }
+    }
+
+
+
+    private string F(double value)
+        => value.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+}

@@ -1,0 +1,76 @@
+@using System.Globalization;
+
+<g transform="translate(@F(X),@F(Y))">
+
+    <!-- sombra da construção -->
+    <ellipse cx="0" cy="23" rx="24" ry="7" fill="#3f2b1d" opacity="0.18" />
+
+
+    <!-- chaminé -->
+    <rect x="9" y="-22" width="5" height="12" rx="1.5" fill="#8b5e3c" />
+
+    <rect x="10" y="-22" width="2" height="12" fill="#a87950" opacity="0.6" />
+
+
+    <!-- corpo da casa -->
+    <rect x="-19" y="2" width="38" height="25" rx="4" fill="@BodyColor" stroke="#5b4636" stroke-width="1.2" />
+
+
+    <!-- sombra lateral da parede -->
+    <path d="
+    M19 7
+    L24 12
+    L24 25
+    L19 27
+    Z" fill="#9b7655" opacity="0.7" />
+
+
+    <!-- telhado -->
+    <path d="
+    M-25 5
+    L0 -22
+    L25 5
+    Q0 12 -25 5
+    Z" fill="@RoofColor" stroke="#5b4636" stroke-width="1.3" />
+
+
+    <!-- detalhe do telhado -->
+    <path d="
+    M-18 4
+    L0 -15
+    L18 4" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="2" />
+
+
+    <!-- porta -->
+    <rect x="-5" y="13" width="10" height="14" rx="3" fill="#654321" />
+
+    <circle cx="3" cy="20" r="1" fill="#f6d365" />
+
+
+    <!-- janela -->
+    <rect x="8" y="10" width="7" height="7" rx="1.5" fill="#ffe7a3" stroke="#5b4636" stroke-width="1" />
+
+    <!-- cruz da janela -->
+    <line x1="11.5" y1="10.5" x2="11.5" y2="16.5" stroke="#c59b6d" stroke-width="0.8" />
+
+    <line x1="8.5" y1="13.5" x2="14.5" y2="13.5" stroke="#c59b6d" stroke-width="0.8" />
+
+</g>
+
+@code {
+    [Parameter]
+    public double X { get; set; }
+
+    [Parameter]
+    public double Y { get; set; }
+
+    [Parameter]
+    public string RoofColor { get; set; } = "#8b3f2f";
+
+    [Parameter]
+    public string BodyColor { get; set; } = "#d4a373";
+
+    private string F(double value)
+        => value.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+}

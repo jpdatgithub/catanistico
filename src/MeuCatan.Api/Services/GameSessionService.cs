@@ -899,6 +899,7 @@ public sealed class CatanGameSessionService : IGameSessionService
 
             TryAttachPort(verticesById, slotEdge.EdgeKey.smallerVertexId, portType);
             TryAttachPort(verticesById, slotEdge.EdgeKey.biggerVertexId, portType);
+            board.PortAnchors.Add((slotEdge.PointA, slotEdge.PointB));
         }
     }
 
@@ -1181,7 +1182,8 @@ public sealed class CatanGameSessionService : IGameSessionService
                         PointA = edge.PointA,
                         PointB = edge.PointB
                     })
-                    .ToList()
+                    .ToList(),
+                PortAnchors = session.Board.PortAnchors.Select(anchor => (anchor.Item1, anchor.Item2)).ToList()
             }
         };
 
