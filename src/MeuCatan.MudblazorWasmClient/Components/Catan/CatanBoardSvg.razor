@@ -82,7 +82,7 @@ else
                 @foreach (var port in model.Ports)
                 {
                     <PortMarker VertexAX="@port.AX" VertexAY="@port.AY" VertexBX="@port.BX" VertexBY="@port.BY"
-                                Label="@port.Label" />
+                                Label="@port.Label" IslandCenterX="CanvasWidth/2" IslandCenterY="CanvasHeight/2" />
                 }
 
                 @foreach (var edge in model.Edges)

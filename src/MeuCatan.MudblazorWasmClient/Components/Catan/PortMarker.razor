@@ -7,45 +7,48 @@
           stroke-linecap="round" opacity="0.95" />
 
 
-    <!-- detalhes das tábuas -->
-    <line x1="@F(MidX)" y1="@F(MidY)" x2="@F(SeaX)" y2="@F(SeaY)" stroke="#c08a52" stroke-width="8"
-          stroke-linecap="round" />
-
-
     <!-- continuação do píer para o mar -->
     <line x1="@F(MidX)" y1="@F(MidY)" x2="@F(SeaX)" y2="@F(SeaY)" stroke="#8b5a2b" stroke-width="10"
           stroke-linecap="round" />
 
 
-    @* <!-- barco no final -->
-    <g transform="translate(@F(SeaX),@F(SeaY)) rotate(@BoatRotation)">
+    <!-- barco no final do píer -->
+    <g transform="translate(@F(BoatX),@F(BoatY))">
 
+        <!-- casco -->
         <path d="
-        M-18 0
-        L18 0
-        L10 10
-        L-10 10
-        Z" fill="#7c3f25" stroke="#4b2e1c" stroke-width="1.2" />
-
-        <line x1="0" y1="0" x2="0" y2="-22" stroke="#5b4636" stroke-width="1.5" />
-
-        <polygon points="0,-20 15,-10 0,-10" fill="#fff7df" />
-
-    </g> *@
+        M -16 0
+        Q 0 10 16 0
+        L 10 10
+        Q 0 16 -10 10
+        Z" fill="#7c3f25" stroke="#4b2e1c" stroke-width="1.5" />
 
 
-    <!-- label sempre no mar -->
-    @* <g transform="translate(@F(LabelX),@F(LabelY))">
+        <!-- convés -->
+        <line x1="-12" y1="3" x2="12" y2="3" stroke="#d19a5a" stroke-width="2" />
 
-        <rect x="-30" y="-12" width="60" height="24" rx="8" fill="#ecfeff" stroke="#0369a1" stroke-width="1.3" />
 
-        <text x="0" y="1" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700"
-              fill="#0f172a">
+        <!-- mastro -->
+        <line x1="0" y1="0" x2="0" y2="-22" stroke="#5b4636" stroke-width="1.8" />
+
+
+        <!-- vela -->
+        <polygon points="
+        0,-20
+        13,-10
+        0,-10" fill="#fff7df" stroke="#d6c7a3" stroke-width="0.8" />
+
+    </g>
+    <!-- balão do porto -->
+    <g transform="translate(@F(LabelX),@F(LabelY))">
+        <!-- corpo do balão -->
+        <rect x="-28" y="-15" width="56" height="32" rx="10" fill="white" stroke="#4b2e1c" stroke-width="1.5" />
+        <!-- texto -->
+        <text x="0" y="6" text-anchor="middle" font-size="14" font-family="sans-serif" font-weight="bold"
+              fill="#4b2e1c">
             @Label
         </text>
-
-    </g> *@
-
+    </g>
 </g>
 
 
@@ -58,68 +61,154 @@
     [Parameter] public double VertexBY { get; set; }
 
 
+    [Parameter] public double IslandCenterX { get; set; }
+    [Parameter] public double IslandCenterY { get; set; }
+
+
     [Parameter]
     public string Label { get; set; } = "3:1";
 
 
     private const double PierLength = 45;
 
-
-    private double MidX => (VertexAX + VertexBX) / 2;
-    private double MidY => (VertexAY + VertexBY) / 2;
-
-
-    /*
-        Direção da borda da ilha
-    */
-    private double EdgeX => VertexBX - VertexAX;
-    private double EdgeY => VertexBY - VertexAY;
+    // distância extra do barco para longe do píer
+    private const double BoatOffset = 25;
 
 
-    /*
-        Normal da borda
-    */
-    private double NormalX => -EdgeY;
-    private double NormalY => EdgeX;
+
+    private double MidX =>
+        (VertexAX + VertexBX) / 2;
+
+
+    private double MidY =>
+        (VertexAY + VertexBY) / 2;
+
+
+
+    private double EdgeX =>
+        VertexBX - VertexAX;
+
+
+    private double EdgeY =>
+        VertexBY - VertexAY;
+
+
+
+    private double NormalX =>
+        -EdgeY;
+
+
+    private double NormalY =>
+        EdgeX;
+
 
 
     private double NormalLength =>
-        Math.Sqrt(NormalX * NormalX + NormalY * NormalY);
-
-
-    private double SeaX =>
-        MidX + NormalX / NormalLength * PierLength;
-
-
-    private double SeaY =>
-        MidY + NormalY / NormalLength * PierLength;
+        Math.Sqrt(
+            NormalX * NormalX +
+            NormalY * NormalY
+        );
 
 
 
-    private double LabelX => SeaX;
-    private double LabelY => SeaY + 25;
+    private double OutwardNormalX =>
+        IsNormalPointingOut()
+            ? NormalX
+            : -NormalX;
 
 
-    private double BoatRotation
+
+    private double OutwardNormalY =>
+        IsNormalPointingOut()
+            ? NormalY
+            : -NormalY;
+
+
+
+    private bool IsNormalPointingOut()
     {
-        get
-        {
-            var angle =
-                Math.Atan2(
-                    NormalY,
-                    NormalX
-                ) * 180 / Math.PI;
+        var testX = MidX + NormalX;
+        var testY = MidY + NormalY;
 
-            if (angle > 90 || angle < -90)
-                angle += 180;
 
-            return angle;
-        }
+        var currentDistance =
+            Distance(
+                MidX,
+                MidY,
+                IslandCenterX,
+                IslandCenterY
+            );
+
+
+        var testDistance =
+            Distance(
+                testX,
+                testY,
+                IslandCenterX,
+                IslandCenterY
+            );
+
+
+        return testDistance > currentDistance;
     }
 
 
 
-    private string F(double value)
+    private double SeaX =>
+        MidX +
+        OutwardNormalX / NormalLength * PierLength;
+
+
+
+    private double SeaY =>
+        MidY +
+        OutwardNormalY / NormalLength * PierLength;
+
+
+
+    /*
+       Posição final do barco.
+       Ele segue a direção do píer,
+       mas fica mais afastado no mar.
+    */
+    private double BoatX =>
+        MidX +
+        OutwardNormalX / NormalLength *
+        (PierLength + BoatOffset);
+
+
+
+    private double BoatY =>
+        MidY +
+        OutwardNormalY / NormalLength *
+        (PierLength + BoatOffset);
+    private const double LabelOffset = 50;
+    private double LabelX =>
+        MidX +
+        OutwardNormalX / NormalLength *
+        (PierLength + BoatOffset + LabelOffset);
+    private double LabelY =>
+        MidY +
+        OutwardNormalY / NormalLength *
+        (PierLength + BoatOffset + LabelOffset);
+    private static double Distance(
+        double x1,
+        double y1,
+        double x2,
+        double y2)
+    {
+        var dx = x1 - x2;
+        var dy = y1 - y2;
+
+        return Math.Sqrt(
+            dx * dx +
+            dy * dy
+        );
+    }
+
+
+
+    private static string F(double value)
         => value.ToString(
             System.Globalization.CultureInfo.InvariantCulture);
 }
