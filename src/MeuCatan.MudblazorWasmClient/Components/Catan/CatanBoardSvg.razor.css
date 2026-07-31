@@ -1,0 +1,20 @@
+.catan-board-svg .vertex-action {
+    transition: fill-opacity 120ms ease, stroke-width 120ms ease, transform 120ms ease;
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+.catan-board-svg .vertex-action:hover {
+    fill-opacity: 0.62;
+    stroke-width: 2.6;
+    transform: scale(1.06);
+}
+
+.catan-board-svg .edge-action {
+    transition: stroke-opacity 120ms ease, stroke-width 120ms ease;
+}
+
+.catan-board-svg .edge-action:hover {
+    stroke-opacity: 0.8;
+    stroke-width: 18;
+}
