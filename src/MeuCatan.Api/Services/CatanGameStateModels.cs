@@ -98,7 +98,7 @@ public sealed class CatanBoardState
     public List<CatanEdgeState> Edges { get; set; } = [];
     public int width { get; set; } = 1000;
     public int height { get; set; } = 1000;
-    public List<(Point, Point)> PortAnchors { get; set; } = [];
+    public List<Port> PortAnchors { get; set; } = [];
 }
 
 public sealed class CatanTileState

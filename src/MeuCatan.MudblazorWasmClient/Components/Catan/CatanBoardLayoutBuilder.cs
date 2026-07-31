@@ -156,63 +156,20 @@ public static class CatanBoardLayoutBuilder
 
     private static List<CatanSvgPort> BuildPorts(CatanGameStateResponse state)
     {
-        var result = new List<CatanSvgPort>();
-        var centerX = state.width / 2.0;
-        var centerY = state.height / 2.0;
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var verticesById = state.Vertices.ToDictionary(vertex => vertex.VertexId);
+        var ports = new List<CatanSvgPort>();
 
-        foreach (var edge in state.Edges)
+        foreach (var port in state.PortAnchors)
         {
-            if (!verticesById.TryGetValue(edge.smallerVertexId, out var vertexA)
-                || !verticesById.TryGetValue(edge.biggerVertexId, out var vertexB)
-                || vertexA.Ports.Count == 0
-                || vertexB.Ports.Count == 0)
+            ports.Add(new CatanSvgPort
             {
-                continue;
-            }
-
-            var sharedPorts = vertexA.Ports
-                .Intersect(vertexB.Ports, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            if (sharedPorts.Count == 0)
-            {
-                continue;
-            }
-
-            foreach (var portCode in sharedPorts)
-            {
-                var uniqueKey = $"{edge.smallerVertexId}:{edge.biggerVertexId}:{portCode}";
-                if (!seen.Add(uniqueKey))
-                {
-                    continue;
-                }
-
-                var midpointX = (edge.PointA.X + edge.PointB.X) / 2.0;
-                var midpointY = (edge.PointA.Y + edge.PointB.Y) / 2.0;
-                var (normalX, normalY) = ComputeOutwardUnitNormal(edge.PointA, edge.PointB, midpointX, midpointY, centerX, centerY);
-
-                const double anchorOffset = 24;
-                const double labelOffset = 48;
-                var anchorX = midpointX + (normalX * anchorOffset);
-                var anchorY = midpointY + (normalY * anchorOffset);
-                var labelX = midpointX + (normalX * labelOffset);
-                var labelY = midpointY + (normalY * labelOffset);
-
-                result.Add(new CatanSvgPort
-                {
-                    PortCode = portCode,
-                    Label = ResolvePortLabel(portCode),
-                    AnchorX = anchorX,
-                    AnchorY = anchorY,
-                    X = labelX,
-                    Y = labelY
-                });
-            }
+                Label = port.Label,
+                AX = port.A.X,
+                AY = port.A.Y,
+                BX = port.B.X,
+                BY = port.B.Y
+            });
         }
-
-        return result;
+        return ports;
     }
 
     private static (double X, double Y) ComputeOutwardUnitNormal(
@@ -352,8 +309,8 @@ public sealed class CatanSvgPort
 {
     public string PortCode { get; init; } = string.Empty;
     public string Label { get; init; } = string.Empty;
-    public double AnchorX { get; init; }
-    public double AnchorY { get; init; }
-    public double X { get; init; }
-    public double Y { get; init; }
+    public double AX { get; init; }
+    public double AY { get; init; }
+    public double BX { get; init; }
+    public double BY { get; init; }
 }

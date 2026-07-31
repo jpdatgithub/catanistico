@@ -108,7 +108,14 @@ public class CatanGameStateResponse
     public List<CatanEdgeResponse> Edges { get; set; } = [];
     public int width { get; set; }
     public int height { get; set; }
-    public List<(Point, Point)> PortAnchors { get; set; } = [];
+    public List<Port> PortAnchors { get; set; } = [];
+}
+
+public sealed class Port
+{
+    public Point A { get; set; }
+    public Point B { get; set; }
+    public string Label { get; set; } = "3:1";
 }
 
 public class BankStateResponse
