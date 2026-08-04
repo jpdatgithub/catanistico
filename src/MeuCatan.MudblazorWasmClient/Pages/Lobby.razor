@@ -11,21 +11,6 @@
     <MudStack Spacing="2">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
             <MudText Typo="Typo.h4">Lobby</MudText>
-            <MudButton Variant="Variant.Filled" Color="Color.Secondary"
-                       Disabled="@(!_podeAtualizar || _carregandoSalas)" OnClick="AtualizarSalasAsync">
-                @if (_carregandoSalas)
-                {
-                    <span>Atualizando...</span>
-                }
-                else if (!_podeAtualizar)
-                {
-                    <span>Atualizar (@_segundosRestantesRefresh s)</span>
-                }
-                else
-                {
-                    <span>Atualizar</span>
-                }
-            </MudButton>
         </MudStack>
 
         @if (!string.IsNullOrWhiteSpace(_erroGeral))
@@ -169,9 +154,8 @@
     private bool _acaoEmAndamento;
     private string? _erroGeral;
     private string? _mensagemCriacao;
-
-    private bool _podeAtualizar = true;
-    private int _segundosRestantesRefresh;
+    private CancellationTokenSource? _pollingCancellation;
+    private Task? _pollingTask;
     private CancellationTokenSource? _presenceCancellation;
     private Task? _presenceTask;
 
@@ -198,39 +182,16 @@ _novaSala.GameType);
         _perfil = await AuthService.GetProfileAsync();
         await AtualizarSalasAsync();
 
+        _pollingCancellation = new CancellationTokenSource();
+        _pollingTask = IniciarPollingAsync(_pollingCancellation.Token);
+
         _presenceCancellation = new CancellationTokenSource();
         _presenceTask = IniciarHeartbeatPresencaSalaAsync(_presenceCancellation.Token);
     }
 
     private async Task AtualizarSalasAsync()
     {
-        if (!_podeAtualizar)
-        {
-            return;
-        }
-
-        _erroGeral = null;
-        _mensagemCriacao = null;
-        _carregandoSalas = true;
-
-        var result = await AuthService.ListarSalasAsync();
-
-        _carregandoSalas = false;
-
-        if (!result.Success || result.Data is null)
-        {
-            _erroGeral = result.ErrorMessage;
-            return;
-        }
-
-        _salas = result.Data.Salas;
-
-        foreach (var sala in _salas.Where(s => s.RequerCodigo && !_codigoPrivadoPorSala.ContainsKey(s.SalaId)))
-        {
-            _codigoPrivadoPorSala[sala.SalaId] = null;
-        }
-
-        _ = IniciarCooldownRefreshAsync();
+        await AtualizarSalasSemCooldownAsync();
     }
 
     private async Task CriarSalaAsync()
@@ -353,6 +314,11 @@ _novaSala.GameType);
         }
 
         _salas = result.Data.Salas;
+
+        foreach (var sala in _salas.Where(s => s.RequerCodigo && !_codigoPrivadoPorSala.ContainsKey(s.SalaId)))
+        {
+            _codigoPrivadoPorSala[sala.SalaId] = null;
+        }
     }
 
     private void AbrirSala(int salaId)
@@ -372,21 +338,21 @@ _novaSala.GameType);
         };
     }
 
-    private async Task IniciarCooldownRefreshAsync()
+    private async Task IniciarPollingAsync(CancellationToken cancellationToken)
     {
-        _podeAtualizar = false;
-        _segundosRestantesRefresh = 5;
-        StateHasChanged();
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
 
-        while (_segundosRestantesRefresh > 0)
+        try
         {
-            await Task.Delay(1000);
-            _segundosRestantesRefresh--;
-            StateHasChanged();
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await AtualizarSalasSemCooldownAsync();
+                await InvokeAsync(StateHasChanged);
+            }
         }
-
-        _podeAtualizar = true;
-        StateHasChanged();
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     private async Task IniciarHeartbeatPresencaSalaAsync(CancellationToken cancellationToken)
@@ -436,6 +402,17 @@ _novaSala.GameType);
 
     public async ValueTask DisposeAsync()
     {
+        if (_pollingCancellation is not null)
+        {
+            await _pollingCancellation.CancelAsync();
+            _pollingCancellation.Dispose();
+        }
+
+        if (_pollingTask is not null)
+        {
+            await _pollingTask;
+        }
+
         if (_presenceCancellation is not null)
         {
             await _presenceCancellation.CancelAsync();

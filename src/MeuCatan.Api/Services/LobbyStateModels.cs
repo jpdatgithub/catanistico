@@ -16,6 +16,7 @@ public sealed class LobbyRoomState
     public int MinJogadores { get; set; }
     public LobbyFaseSala Fase { get; set; } = LobbyFaseSala.Lobby;
     public DateTime CriadaEmUtc { get; set; }
+    public DateTime? GameStartedAtUtc { get; set; }
     public Dictionary<int, LobbyPlayerState> Jogadores { get; set; } = [];
 }
 

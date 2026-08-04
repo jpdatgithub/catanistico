@@ -1,0 +1,175 @@
+@using System.Globalization;
+
+<div class="build-action-panel" role="group" aria-label="Ações de construção">
+    <MudTooltip Placement="Placement.Top">
+        <TooltipContent>
+            @RenderCostTooltip(DevelopmentCost)
+        </TooltipContent>
+        <ChildContent>
+            <span class="build-action-tooltip-anchor">
+                <ResourceCard ResourceType="desenvolvimento" Disabled="@IsDevelopmentDisabled"
+                              GrayscaleWhenDisabled="true" OnClick="HandleDevelopmentClick" />
+            </span>
+        </ChildContent>
+    </MudTooltip>
+
+    <MudTooltip Placement="Placement.Top">
+        <TooltipContent>
+            @RenderCostTooltip(RoadCost)
+        </TooltipContent>
+        <ChildContent>
+            <span class="build-action-tooltip-anchor">
+                <button type="button" class="build-action-button @(ActiveBuildMode == GameActionTypes.BuildRoad ? "build-action-button--active" : "")" disabled="@IsRoadDisabled" @onclick="HandleRoadClick"
+                        aria-label="Construir estrada">
+                    <svg class="build-marker-preview" viewBox="-24 -12 48 30" role="img" aria-label="Estrada">
+                        <RoadMarker X="0" Y="0" Color="@PlayerColor" />
+                    </svg>
+                    <span>Estrada</span>
+                </button>
+            </span>
+        </ChildContent>
+    </MudTooltip>
+
+    <MudTooltip Placement="Placement.Top">
+        <TooltipContent>
+            @RenderCostTooltip(CityCost)
+        </TooltipContent>
+        <ChildContent>
+            <span class="build-action-tooltip-anchor">
+                <button type="button" class="build-action-button @(ActiveBuildMode == GameActionTypes.BuildCity ? "build-action-button--active" : "")" disabled="@IsCityDisabled" @onclick="HandleCityClick"
+                        title="Cidade" aria-label="Construir cidade">
+                    <svg class="build-marker-preview" viewBox="0 -24 48 56" role="img" aria-label="Cidade">
+                        <CityMarker X="24" Y="25" Color="@PlayerColor" />
+                    </svg>
+                    <span>Cidade</span>
+                </button>
+            </span>
+        </ChildContent>
+    </MudTooltip>
+
+    <MudTooltip Placement="Placement.Top">
+        <TooltipContent>
+            @RenderCostTooltip(VillageCost)
+        </TooltipContent>
+        <ChildContent>
+            <span class="build-action-tooltip-anchor">
+                <button type="button" class="build-action-button @(ActiveBuildMode == GameActionTypes.BuildVillage ? "build-action-button--active" : "")" disabled="@IsVillageDisabled"
+                        @onclick="HandleVillageClick" title="Vilarejo" aria-label="Construir vilarejo">
+                    <svg class="build-marker-preview" viewBox="0 -14 48 46" role="img" aria-label="Vilarejo">
+                        <VillageMarker X="24" Y="24" RoofColor="@PlayerColor" BodyColor="@PlayerColor" />
+                    </svg>
+                    <span>Vilarejo</span>
+                </button>
+            </span>
+        </ChildContent>
+    </MudTooltip>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<BuildCostItem> DevelopmentCost =
+    [
+        new("ovelha", 1),
+        new("trigo", 1),
+        new("pedra", 1)
+    ];
+
+    private static readonly IReadOnlyList<BuildCostItem> RoadCost =
+    [
+        new("madeira", 1),
+        new("argila", 1)
+    ];
+
+    private static readonly IReadOnlyList<BuildCostItem> VillageCost =
+    [
+        new("trigo", 1),
+        new("ovelha", 1),
+        new("argila", 1),
+        new("madeira", 1)
+    ];
+
+    private static readonly IReadOnlyList<BuildCostItem> CityCost =
+    [
+        new("trigo", 2),
+        new("pedra", 3)
+    ];
+
+    [Parameter]
+    public string PlayerColor { get; set; } = "#475569";
+
+    [Parameter]
+    public IReadOnlyDictionary<string, int> PlayerResources { get; set; } =
+        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public bool CanBuyDevelopmentCard { get; set; }
+
+    [Parameter]
+    public string? ActiveBuildMode { get; set; }
+
+    [Parameter]
+    public EventCallback OnDevelopmentClicked { get; set; }
+
+    [Parameter]
+    public EventCallback OnRoadClicked { get; set; }
+
+    [Parameter]
+    public EventCallback OnCityClicked { get; set; }
+
+    [Parameter]
+    public EventCallback OnVillageClicked { get; set; }
+
+    private bool IsDevelopmentDisabled => !CanBuyDevelopmentCard || IsActionDisabled(DevelopmentCost);
+
+    private bool IsRoadDisabled => IsActionDisabled(RoadCost);
+
+    private bool IsVillageDisabled => IsActionDisabled(VillageCost);
+
+    private bool IsCityDisabled => IsActionDisabled(CityCost);
+
+    private Task HandleDevelopmentClick()
+        => IsDevelopmentDisabled ? Task.CompletedTask : OnDevelopmentClicked.InvokeAsync();
+
+    private Task HandleRoadClick()
+        => IsRoadDisabled ? Task.CompletedTask : OnRoadClicked.InvokeAsync();
+
+    private Task HandleCityClick()
+        => IsCityDisabled ? Task.CompletedTask : OnCityClicked.InvokeAsync();
+
+    private Task HandleVillageClick()
+        => IsVillageDisabled ? Task.CompletedTask : OnVillageClicked.InvokeAsync();
+
+    private bool IsActionDisabled(IReadOnlyList<BuildCostItem> cost)
+        => Disabled || !HasRequiredResources(cost);
+
+    private bool HasRequiredResources(IReadOnlyList<BuildCostItem> cost)
+    {
+        foreach (var item in cost)
+        {
+            var available = PlayerResources.TryGetValue(item.ResourceType, out var value) ? value : 0;
+            if (available < item.Amount)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static RenderFragment<IReadOnlyList<BuildCostItem>> RenderCostTooltip => cost =>
+    @<div class="build-cost-tooltip" style="display:flex; align-items:center; gap:6px; white-space:nowrap;">
+        @foreach (var item in cost)
+        {
+            <span class="build-cost-item" style="display:inline-flex; align-items:center; gap:2px;">
+                <span style="display:inline-flex; width:18px; height:18px;">
+                    <ResourceTokenIcon ResourceType="@item.ResourceType" />
+                </span>
+                <span class="build-cost-qty" style="line-height:1;">@item.Amount</span>
+            </span>
+        }
+    </div>;
+
+    private sealed record BuildCostItem(string ResourceType, int Amount);
+}

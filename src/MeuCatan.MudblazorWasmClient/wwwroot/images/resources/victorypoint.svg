@@ -1,0 +1,18 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Victory Point">
+  <defs>
+    <linearGradient id="vpMedal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="vpRibbon" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+
+  <path d="M23 10h8l-3 16h-7z" fill="url(#vpRibbon)" stroke="#1e3a8a" stroke-width="1.5"/>
+  <path d="M33 10h8l2 16h-7z" fill="url(#vpRibbon)" stroke="#1e3a8a" stroke-width="1.5"/>
+  <circle cx="32" cy="31" r="15" fill="url(#vpMedal)" stroke="#7c2d12" stroke-width="2"/>
+  <circle cx="32" cy="31" r="9" fill="#fff7d6" opacity="0.75"/>
+  <path d="M32 22l2.7 5.6 6.1 0.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-0.9z" fill="#92400e"/>
+</svg>

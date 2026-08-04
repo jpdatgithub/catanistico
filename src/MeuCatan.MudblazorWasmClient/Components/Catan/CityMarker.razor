@@ -1,6 +1,6 @@
 @using System.Globalization;
 
-<g transform="translate(@F(X),@F(Y - 20))">
+<g transform="translate(@F(X),@F(Y - 24))">
     <defs>
         <linearGradient id="@GradientId" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stop-color="@LightColor" />
@@ -8,25 +8,25 @@
         </linearGradient>
     </defs>
 
-    <!-- sombra no chão -->
-    <ellipse cx="0" cy="26" rx="20" ry="6" fill="#111111" opacity="0.2" />
+    <ellipse cx="0" cy="28" rx="22" ry="7" fill="#111111" opacity="0.22" />
 
-    <!-- marcador no estilo do vilarejo.svg -->
-    <g transform="translate(-24,-21) scale(3)">
-
-        <!-- fundo branco da casa substituído por gradiente da cor do jogador -->
-        <path d="M8 2.2 L2.0 8.3 V13.2 A0.8 0.8 0 0 0 2.75 14 H13.25 A0.8 0.8 0 0 0 14.0 13.2 V8.3 Z"
-              fill="url(#@GradientId)" transform="translate(0,-1.2) scale(1,1.16)" />
-
-        <!-- contornos originais do SVG -->
-        <path fill-rule="evenodd"
-              d="M2 13.5V7h1v6.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5V7h1v6.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5zm11-11V6l-2-2V2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5z"
-              fill="#1f1f1f" />
-        <path fill-rule="evenodd"
-              d="M7.293 1.5a1 1 0 0 1 1.414 0l6.647 6.646a.5.5 0 0 1-.708.708L8 2.207 1.354 8.854a.5.5 0 1 1-.708-.708L7.293 1.5z"
-              fill="#1f1f1f" />
+    <g transform="translate(-24,-24) scale(0.096)">
+        <!-- silhueta de fundo preenchida com o gradiente da cor do jogador -->
+        <path
+        d="M179.48,100 L320,175 L307.576,206 V449.788 H51.576 V206 L39,175 Z M331.576,17.788 h96 v18 h-96 z M347.576,35 h64 v145 h-64 z M339.576,176 h144 v26 h-144 z M323.576,202 h144 v248 h-144 z M483.576,113.788 v48 H333.552 l-91.2,-48 z"
+        fill="url(#@GradientId)" />
+        <!-- traços originais do cidade.svg em preto -->
+        <path
+        d="M499.576,217.788v-120h-72v-48h16v-48h-128v48h16v48H211.952l-32.288-16.992L0,170.628l7.16,14.312l12.416-6.208v44.304l16-8.424v235.176h-32v48h496v-48h-16v-232H499.576z M331.576,17.788h96v16h-96V17.788z M411.576,49.788v48h-64v-48H411.576z M483.576,113.788v48H333.552l-91.2-48H483.576z M467.576,217.788v232h-144V214.62l6.024,3.168H467.576z M35.576,170.732L179.48,98.78l144.096,75.84v21.92l-144-75.792l-144,75.792V170.732z M107.576,289.788v160h-56V206.196l128-67.368l128,67.368v243.592h-56v-160H107.576z M235.576,305.788v144h-48v-144H235.576z M171.576,305.788v144h-48v-144H171.576z M483.576,481.788h-464v-16h88h144h232V481.788z M339.576,201.788v-24h144v24H339.576z"
+        fill="#000000" />
+        <path
+        d="M131.576,273.788h96v-96h-96V273.788z M187.576,193.788h24v24h-24V193.788z M187.576,233.788h24v24h-24V233.788z M147.576,193.788h24v24h-24V193.788z M147.576,233.788h24v24h-24V233.788z"
+        fill="#000000" />
+        <rect x="347.576" y="385.788" width="96" height="16" fill="#000000" />
+        <path
+        d="M443.576,233.788h-96v136h96V233.788z M427.576,353.788h-64v-16h64V353.788z M427.576,321.788h-64v-72h64V321.788z"
+        fill="#000000" />
     </g>
-
 </g>
 
 @code {
@@ -37,24 +37,16 @@
     public double Y { get; set; }
 
     [Parameter]
-    public string RoofColor { get; set; } = "#8b3f2f";
-
-    [Parameter]
-    public string BodyColor { get; set; } = "#d4a373";
-
-    private string PlayerColor
-        => string.IsNullOrWhiteSpace(BodyColor)
-            ? RoofColor
-            : BodyColor;
+    public string Color { get; set; } = "#d4a373";
 
     private string GradientId
-        => $"village-grad-{Sanitize(F(X))}-{Sanitize(F(Y))}";
+        => $"city-grad-{Sanitize(F(X))}-{Sanitize(F(Y))}";
 
     private string LightColor
-        => BlendWithWhite(PlayerColor, 0.28);
+        => BlendWithWhite(Color, 0.28);
 
     private string DarkColor
-        => BlendWithBlack(PlayerColor, 0.18);
+        => BlendWithBlack(Color, 0.18);
 
     private string F(double value)
         => value.ToString(

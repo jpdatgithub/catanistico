@@ -42,8 +42,8 @@
                             {
                                 <CatanBoardSvg State="_session.CatanState" FillParent="true"
                                                PlayerColorsById="@_session.Players.ToDictionary(player => player.UsuarioId, player => player.Cor)"
-                                               OnVertexClicked="ExecutarPosicionamentoInicialAsync"
-                                               OnEdgeClicked="ExecutarPosicionamentoEstradaInicialAsync" />
+                                               OnVertexClicked="HandleVertexClickAsync" OnEdgeClicked="HandleEdgeClickAsync"
+                                               HighlightedVertexIds="@HighlightedVertexIds" HighlightedEdgeKeys="@HighlightedEdgeKeys" />
                             }
 
                             @if (currentPlayer is not null && _isTradeOpen)
@@ -55,33 +55,60 @@
                                                     OnBankTrade="ExecutarTrocaBancoAsync" />
                             }
 
+                            @if (currentPlayer is not null && TemDescartePendente)
+                            {
+                                <ResourceDiscardPanel Player="currentPlayer" IsOpen="true"
+                                                     RequiredAmount="@QuantidadeDescartePendente"
+                                                     SelectedResources="_selectedDiscardResources"
+                                                     OnSelectedResourceClicked="RemoverRecursoDoDescarteAsync"
+                                                     OnConfirm="ExecutarDescarteAsync" />
+                            }
+
                             <OfferViewPanelStack Offers="OfertasAtivas" ViewerColor="@currentPlayer?.Cor" />
+
+                            @if (_session.Phase == GameTipoFase.Turno && _session.CatanState is not null)
+                            {
+                                <div class="game-board-overlay-actions">
+                                    <MudStack Row="true" Spacing="1" Class="resource-actions">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="dice-action-button"
+                                                   Disabled="@(!PodeRolarDados)" OnClick="ExecutarRolagemDadosAsync">
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                <DiceFace Value="@(_session.CatanState.LastDice1 ?? 6)" Size="36" />
+                                                <DiceFace Value="@(_session.CatanState.LastDice2 ?? 6)" Size="36" />
+                                            </MudStack>
+                                        </MudButton>
+
+                                        <MudIconButton Icon="@Icons.Material.Filled.SkipNext" Variant="Variant.Filled"
+                                                       Color="Color.Primary" Class="skip-turn-button" Disabled="@(!PodePassarTurno)"
+                                                       OnClick="ExecutarPassarTurnoAsync" aria-label="Passar turno" />
+                                    </MudStack>
+                                </div>
+                            }
                         </div>
 
                         @if (currentPlayer is not null)
                         {
                             <div class="game-resource-bar">
                                 <div class="game-resource-bar-contents">
-                                    <PlayerResourcePanel Player="currentPlayer" SelectedResources="_selectedTradeResources"
-                                                         CanInteract="@PodeInteragirComRecursos"
-                                                         OnResourceClicked="AbrirOuAdicionarRecursoNaTrocaAsync" />
+                                    <div class="game-resource-panel-slot">
+                                        <PlayerResourcePanel Player="currentPlayer" SelectedResources="RecursosSelecionadosNaMao"
+                                                             CanInteract="@PodeInteragirComMao"
+                                                             OnResourceClicked="HandleCliqueRecursoDaMaoAsync" />
+                                    </div>
 
-                                    @if (_session.Phase == GameTipoFase.Turno && _session.CatanState is not null)
-                                    {
-                                        <MudStack Row="true" Spacing="1" Class="resource-actions">
-                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="dice-action-button"
-                                                       Disabled="@(!PodeRolarDados)" OnClick="ExecutarRolagemDadosAsync">
-                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                    <DiceFace Value="@(_session.CatanState.LastDice1 ?? 6)" Size="36" />
-                                                    <DiceFace Value="@(_session.CatanState.LastDice2 ?? 6)" Size="36" />
-                                                </MudStack>
-                                            </MudButton>
+                                    <div class="game-development-cards-slot">
+                                        <PlayerDevelopmentCardsPanel Player="currentPlayer" />
+                                    </div>
 
-                                            <MudIconButton Icon="@Icons.Material.Filled.SkipNext" Color="Color.Secondary"
-                                                           Disabled="@(!PodePassarTurno)" OnClick="ExecutarPassarTurnoAsync"
-                                                           aria-label="Passar turno" />
-                                        </MudStack>
-                                    }
+                                    <div class="game-action-panel-slot">
+                                        <BuildActionPanel PlayerColor="@PlayerColorUtils.ToHex(currentPlayer.Cor)"
+                                                          PlayerResources="@currentPlayer.Resources" Disabled="@(!PodeInteragirComRecursos)"
+                                                          CanBuyDevelopmentCard="@PodeComprarCartaDesenvolvimento"
+                                                          ActiveBuildMode="@_buildMode"
+                                                          OnDevelopmentClicked="ExecutarCompraCartaDesenvolvimentoAsync"
+                                                          OnRoadClicked="EntrarModoEstrada" OnCityClicked="EntrarModoCidade"
+                                                          OnVillageClicked="EntrarModoVilarejo" />
+                                    </div>
                                 </div>
                             </div>
                         }
@@ -100,13 +127,68 @@
                             </MudText>
                         </MudPaper> *@
 
+                        
+
                         <MudPaper Class="pa-4">
-                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                <MudText Typo="Typo.h6">Jogadores</MudText>
-                                <MudButton Variant="Variant.Text" OnClick="AtualizarSessaoAsync" Disabled="@_carregando">
-                                    Atualizar
-                                </MudButton>
-                            </MudStack>
+                            <MudText Typo="Typo.h6">Histórico do jogo</MudText>
+
+                            <div class="mt-2 history-chat-list">
+                                @foreach (var entrada in Enumerable.Reverse(_session.CatanState!.RollHistory))
+                                {
+                                    <div class="history-chat-line">
+                                        @{
+                                            var turnPlayerColor = PlayerColorUtils.ToHex(
+                                                _session.Players.FirstOrDefault(p => p.UsuarioId == entrada.CurrentTurnPlayerId)?.Cor
+                                                ?? string.Empty);
+                                        }
+
+                                        <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                                                   Style="@($"background-color:{turnPlayerColor}; color:#fff;")">
+                                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                        </MudAvatar>
+
+                                        <span class="history-dice-inline">
+                                            <DiceFace Value="@entrada.Dice1" Size="18" />
+                                            <DiceFace Value="@entrada.Dice2" Size="18" />
+                                        </span>
+
+                                        @if (entrada.Total == 7)
+                                        {
+                                            <span class="history-caption">• saiu 7, sem recursos</span>
+                                        }
+                                        else if (entrada.ResourceGains.Count == 0)
+                                        {
+                                            <span class="history-caption">• sem ganhos</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="history-caption">•</span>
+                                            @foreach (var ganho in entrada.ResourceGains)
+                                            {
+                                                var avatarColor = PlayerColorUtils.ToHex(_session.Players.FirstOrDefault(p =>
+                                                p.UsuarioId == ganho.UsuarioId)?.Cor ?? string.Empty);
+                                                <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                                                           Style="@($"background-color:{avatarColor}; color:#fff;")">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                                </MudAvatar>
+
+                                                @for (var i = 0; i < ganho.Amount; i++)
+                                                {
+                                                    <span class="history-resource-token">
+                                                        <ResourceTokenIcon ResourceType="@ganho.ResourceType" />
+                                                    </span>
+                                                }
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </MudPaper>
+
+                        <GameChatPanel SalaId="@SalaId" />
+
+                        <BankStatePanel Bank="@_session.CatanState?.Bank" />
+                        <MudPaper Class="pa-4">
                             <MudList T="GamePlayerStateResponse">
                                 @foreach (var player in _session.Players)
                                 {
@@ -119,79 +201,22 @@
                                                 </MudChip>
                                             </MudStack>
                                             <MudText Typo="Typo.caption">Pontos: @player.Pontos</MudText>
-                                            <MudText Typo="Typo.caption">Peças: estradas @player.RemainingRoads, aldeias
-                                                @player.RemainingSettlements, cidades @player.RemainingCities</MudText>
-                                            </MudStack>
-                                        </MudListItem>
-                                    }
-                                </MudList>
-                            </MudPaper>
+                                            <MudText Typo="Typo.caption">Recursos: @player.Resources.Values.Sum()</MudText>
+                                            <MudText Typo="Typo.caption">Desenvolvimentos: não implementado</MudText>
+                                            <MudText Typo="Typo.caption">Cavalaria: não implementado</MudText>
+                                            <MudText Typo="Typo.caption">Maior estrada: não implementado</MudText>
+                                        </MudStack>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        </MudPaper>
 
-                            <MudPaper Class="pa-4">
-                                <MudText Typo="Typo.h6">Histórico do jogo</MudText>
-
-                                <div class="mt-2 history-chat-list">
-                                    @foreach (var entrada in Enumerable.Reverse(_session.CatanState!.RollHistory))
-                                    {
-                                        <div class="history-chat-line">
-                                            @{
-                                                var turnPlayerColor = PlayerColorUtils.ToHex(
-                                                    _session.Players.FirstOrDefault(p => p.UsuarioId == entrada.CurrentTurnPlayerId)?.Cor
-                                                    ?? string.Empty);
-                                            }
-
-                                            <MudAvatar Size="Size.Small" Class="history-player-avatar"
-                                                       Style="@($"background-color:{turnPlayerColor}; color:#fff;")">
-                                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
-                                            </MudAvatar>
-
-                                            <span class="history-dice-inline">
-                                                <DiceFace Value="@entrada.Dice1" Size="18" />
-                                                <DiceFace Value="@entrada.Dice2" Size="18" />
-                                            </span>
-
-                                            @if (entrada.Total == 7)
-                                            {
-                                                <span class="history-caption">• saiu 7, sem recursos</span>
-                                            }
-                                            else if (entrada.ResourceGains.Count == 0)
-                                            {
-                                                <span class="history-caption">• sem ganhos</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="history-caption">•</span>
-                                                @foreach (var ganho in entrada.ResourceGains)
-                                                {
-                                                    var avatarColor = PlayerColorUtils.ToHex(_session.Players.FirstOrDefault(p =>
-                                                    p.UsuarioId == ganho.UsuarioId)?.Cor ?? string.Empty);
-                                                    <MudAvatar Size="Size.Small" Class="history-player-avatar"
-                                                               Style="@($"background-color:{avatarColor}; color:#fff;")">
-                                                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
-                                                    </MudAvatar>
-
-                                                    @for (var i = 0; i < ganho.Amount; i++)
-                                                    {
-                                                        <span class="history-resource-token">
-                                                            <ResourceTokenIcon ResourceType="@ganho.ResourceType" />
-                                                        </span>
-                                                    }
-                                                }
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                            </MudPaper>
-
-                            <GameChatPanel SalaId="@SalaId" />
-
-                            <BankStatePanel Bank="@_session.CatanState?.Bank" />
-                        </MudStack>
-                    </MudItem>
-                </MudGrid>
-            }
-        </MudContainer>
-    </div>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        }
+    </MudContainer>
+</div>
 
 @code {
     [Parameter]
@@ -211,6 +236,8 @@
     private bool _isTradeOpen;
     private readonly Dictionary<string, int> _selectedTradeResources = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _askedTradeResources = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _selectedDiscardResources = new(StringComparer.OrdinalIgnoreCase);
+    private string? _buildMode;
     // Keep heavy state serialization opt-in even in development builds.
     private const bool EnableDebugStatePanelInDevelopment = false;
     private const int PollingNormalMs = 2000;
@@ -233,16 +260,75 @@ StringComparison.OrdinalIgnoreCase)
     private bool PodePassarTurno => !_carregando
         && _session?.AvailableActions.Contains(GameActionTypes.EndTurn) == true;
 
+    private bool PodeComprarCartaDesenvolvimento => !_carregando
+        && _session?.AvailableActions.Contains(GameActionTypes.BuyDevelopmentCard) == true;
+
     private bool PodeInteragirComRecursos => _session is not null
         && !_carregando
+        && !TemDescartePendente
         && _session.Phase == GameTipoFase.Turno
         && _session.CanCurrentUserAct
         && _session.CatanState is not null
         && _session.CatanState.HasRolledDiceThisTurn;
 
+    private bool PodeInteragirComMao => _session is not null
+        && !_carregando
+        && (TemDescartePendente || PodeInteragirComRecursos);
+
+    private bool TemDescartePendente
+    {
+        get
+        {
+            if (_session?.CatanState?.PendingDiscardByPlayerId is null)
+            {
+                return false;
+            }
+
+            return _session.CatanState.PendingDiscardByPlayerId.TryGetValue(_session.YourPlayerId, out var amount)
+                && amount > 0;
+        }
+    }
+
+    private int QuantidadeDescartePendente
+    {
+        get
+        {
+            if (_session?.CatanState?.PendingDiscardByPlayerId is null)
+            {
+                return 0;
+            }
+
+            return _session.CatanState.PendingDiscardByPlayerId.TryGetValue(_session.YourPlayerId, out var amount)
+                ? Math.Max(0, amount)
+                : 0;
+        }
+    }
+
+    private int QuantidadeDescarteSelecionada => _selectedDiscardResources.Values.Sum();
+
+    private IReadOnlyDictionary<string, int> RecursosSelecionadosNaMao =>
+        TemDescartePendente
+            ? _selectedDiscardResources
+            : _selectedTradeResources;
+
     private IReadOnlyList<TradeOfferResponse> OfertasAtivas => _session?.CatanState?.ActiveTradeOffers
         .Where(offer => offer.ExpiresAtUtc > DateTime.UtcNow)
         .ToList() ?? [];
+
+    private IReadOnlySet<int>? HighlightedVertexIds =>
+        _session?.CatanState is { } vertexState
+            ? _buildMode switch
+            {
+                GameActionTypes.BuildVillage => ComputeVillageTargets(vertexState, _session.YourPlayerId),
+                GameActionTypes.BuildCity => ComputeCityTargets(vertexState, _session.YourPlayerId),
+                _ => null
+            }
+            : null;
+
+    private IReadOnlySet<EdgeKey>? HighlightedEdgeKeys =>
+        _buildMode == GameActionTypes.BuildRoad && _session?.CatanState is { } edgeState
+            ? ComputeRoadTargets(edgeState, _session.YourPlayerId)
+            : null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -304,6 +390,107 @@ StringComparison.OrdinalIgnoreCase)
         _isTradeOpen = true;
         _selectedTradeResources[resourceType] = selectedCount + 1;
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleCliqueRecursoDaMaoAsync(string resourceType)
+    {
+        if (TemDescartePendente)
+        {
+            await AbrirOuAdicionarRecursoNoDescarteAsync(resourceType);
+            return;
+        }
+
+        await AbrirOuAdicionarRecursoNaTrocaAsync(resourceType);
+    }
+
+    private async Task AbrirOuAdicionarRecursoNoDescarteAsync(string resourceType)
+    {
+        if (!TemDescartePendente || _session is null || _carregando)
+        {
+            return;
+        }
+
+        var requiredAmount = QuantidadeDescartePendente;
+        if (requiredAmount <= 0 || QuantidadeDescarteSelecionada >= requiredAmount)
+        {
+            return;
+        }
+
+        var currentPlayer = _session.Players.FirstOrDefault(player => player.UsuarioId == _session.YourPlayerId);
+        if (currentPlayer is null)
+        {
+            return;
+        }
+
+        var availableCount = currentPlayer.Resources.TryGetValue(resourceType, out var currentCount) ? currentCount : 0;
+        var selectedCount = _selectedDiscardResources.TryGetValue(resourceType, out var existingSelected) ? existingSelected : 0;
+
+        if (selectedCount >= availableCount)
+        {
+            return;
+        }
+
+        _selectedDiscardResources[resourceType] = selectedCount + 1;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RemoverRecursoDoDescarteAsync(string resourceType)
+    {
+        if (string.IsNullOrWhiteSpace(resourceType))
+        {
+            return;
+        }
+
+        if (!_selectedDiscardResources.TryGetValue(resourceType, out var selectedCount) || selectedCount <= 0)
+        {
+            return;
+        }
+
+        if (selectedCount == 1)
+        {
+            _selectedDiscardResources.Remove(resourceType);
+        }
+        else
+        {
+            _selectedDiscardResources[resourceType] = selectedCount - 1;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ExecutarDescarteAsync()
+    {
+        if (!TemDescartePendente || _session is null || _carregando)
+        {
+            return;
+        }
+
+        if (QuantidadeDescarteSelecionada != QuantidadeDescartePendente)
+        {
+            return;
+        }
+
+        _acaoErro = null;
+        _carregando = true;
+
+        var result = await AuthService.ExecutarAcaoJogoAsync(SalaId, new GameActionRequest
+        {
+            ActionType = GameActionTypes.DiscardResources,
+            OfferedResources = new Dictionary<string, int>(_selectedDiscardResources, StringComparer.OrdinalIgnoreCase)
+        });
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _acaoErro = result.ErrorMessage ?? "Não foi possível descartar os recursos.";
+            HabilitarPollingRapidoTemporario();
+            await AtualizarSessaoEmSegundoPlanoAsync();
+            return;
+        }
+
+        AtualizarSessionState(result.Data);
+        HabilitarPollingRapidoTemporario();
     }
 
     private async Task FecharInterfaceTrocaAsync()
@@ -466,6 +653,18 @@ StringComparison.OrdinalIgnoreCase)
     private async Task ExecutarPassarTurnoAsync()
     {
         await ExecutarAcaoDeTurnoAsync(GameActionTypes.EndTurn, "Não foi possível passar o turno.");
+    }
+
+    private async Task ExecutarCompraCartaDesenvolvimentoAsync()
+    {
+        if (!PodeComprarCartaDesenvolvimento)
+        {
+            return;
+        }
+
+        await ExecutarAcaoDeTurnoAsync(
+            GameActionTypes.BuyDevelopmentCard,
+            "Não foi possível comprar a carta de desenvolvimento.");
     }
 
     private async Task ExecutarAcaoDeTurnoAsync(string actionType, string mensagemErroPadrao)
@@ -632,7 +831,39 @@ StringComparison.OrdinalIgnoreCase)
 
     private void AtualizarSessionState(GameSessionResponse session)
     {
+        if (_buildMode is not null)
+        {
+            var isInteractable = session.Phase == GameTipoFase.Turno
+                && session.CanCurrentUserAct
+                && session.CatanState?.HasRolledDiceThisTurn == true;
+            if (!isInteractable)
+                _buildMode = null;
+        }
+
         _session = session;
+
+        var pendingDiscardAmount = session.CatanState?.PendingDiscardByPlayerId.TryGetValue(session.YourPlayerId, out var amount) == true
+            ? Math.Max(0, amount)
+            : 0;
+
+        if (pendingDiscardAmount > 0)
+        {
+            _isTradeOpen = false;
+            _selectedTradeResources.Clear();
+            _askedTradeResources.Clear();
+
+            var currentPlayer = session.Players.FirstOrDefault(player => player.UsuarioId == session.YourPlayerId);
+            if (currentPlayer is null
+                || QuantidadeDescarteSelecionada > pendingDiscardAmount
+                || ExcedeRecursosDisponiveisNoDescarte(currentPlayer, _selectedDiscardResources))
+            {
+                _selectedDiscardResources.Clear();
+            }
+        }
+        else
+        {
+            _selectedDiscardResources.Clear();
+        }
 
         if (!_isTradeOpen)
         {
@@ -651,4 +882,244 @@ StringComparison.OrdinalIgnoreCase)
     {
         _pollingRapidoAteUtc = DateTime.UtcNow.Add(JanelaPollingRapido);
     }
+
+    private Task EntrarModoEstrada()
+    {
+        if (!PodeInteragirComRecursos)
+            return Task.CompletedTask;
+
+        _buildMode = _buildMode == GameActionTypes.BuildRoad ? null : GameActionTypes.BuildRoad;
+        return Task.CompletedTask;
+    }
+
+    private Task EntrarModoCidade()
+    {
+        if (!PodeInteragirComRecursos)
+            return Task.CompletedTask;
+
+        _buildMode = _buildMode == GameActionTypes.BuildCity ? null : GameActionTypes.BuildCity;
+        return Task.CompletedTask;
+    }
+
+    private Task EntrarModoVilarejo()
+    {
+        if (!PodeInteragirComRecursos)
+            return Task.CompletedTask;
+
+        _buildMode = _buildMode == GameActionTypes.BuildVillage ? null : GameActionTypes.BuildVillage;
+        return Task.CompletedTask;
+    }
+
+    private static bool ExcedeRecursosDisponiveisNoDescarte(
+        GamePlayerStateResponse player,
+        IReadOnlyDictionary<string, int> selectedDiscardResources)
+    {
+        foreach (var selected in selectedDiscardResources)
+        {
+            if (selected.Value <= 0)
+            {
+                return true;
+            }
+
+            if (player.Resources.GetValueOrDefault(selected.Key) < selected.Value)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task HandleVertexClickAsync(int vertexId)
+    {
+        if (_buildMode == GameActionTypes.BuildVillage)
+            await ExecutarConstruirVilarejoAsync(vertexId);
+        else if (_buildMode == GameActionTypes.BuildCity)
+            await ExecutarConstruirCidadeAsync(vertexId);
+        else
+            await ExecutarPosicionamentoInicialAsync(vertexId);
+    }
+
+    private async Task HandleEdgeClickAsync(EdgeKey edge)
+    {
+        if (_buildMode == GameActionTypes.BuildRoad)
+            await ExecutarConstruirEstradaAsync(edge);
+        else
+            await ExecutarPosicionamentoEstradaInicialAsync(edge);
+    }
+
+    private async Task ExecutarConstruirEstradaAsync(EdgeKey edge)
+    {
+        _buildMode = null;
+        if (_session is null || _carregando)
+            return;
+
+        _acaoErro = null;
+        _carregando = true;
+
+        var result = await AuthService.ExecutarAcaoJogoAsync(SalaId, new GameActionRequest
+        {
+            ActionType = GameActionTypes.BuildRoad,
+            SmallerVertexId = edge.smallerVertexId,
+            BiggerVertexId = edge.biggerVertexId
+        });
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _acaoErro = result.ErrorMessage ?? "Não foi possível construir a estrada.";
+            return;
+        }
+
+        AtualizarSessionState(result.Data);
+        HabilitarPollingRapidoTemporario();
+    }
+
+    private async Task ExecutarConstruirVilarejoAsync(int vertexId)
+    {
+        _buildMode = null;
+        if (_session is null || _carregando)
+            return;
+
+        _acaoErro = null;
+        _carregando = true;
+
+        var result = await AuthService.ExecutarAcaoJogoAsync(SalaId, new GameActionRequest
+        {
+            ActionType = GameActionTypes.BuildVillage,
+            VertexId = vertexId
+        });
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _acaoErro = result.ErrorMessage ?? "Não foi possível construir o vilarejo.";
+            return;
+        }
+
+        AtualizarSessionState(result.Data);
+        HabilitarPollingRapidoTemporario();
+    }
+
+    private async Task ExecutarConstruirCidadeAsync(int vertexId)
+    {
+        _buildMode = null;
+        if (_session is null || _carregando)
+            return;
+
+        _acaoErro = null;
+        _carregando = true;
+
+        var result = await AuthService.ExecutarAcaoJogoAsync(SalaId, new GameActionRequest
+        {
+            ActionType = GameActionTypes.BuildCity,
+            VertexId = vertexId
+        });
+
+        _carregando = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _acaoErro = result.ErrorMessage ?? "Não foi possível construir a cidade.";
+            return;
+        }
+
+        AtualizarSessionState(result.Data);
+        HabilitarPollingRapidoTemporario();
+    }
+
+    private static HashSet<EdgeKey> ComputeRoadTargets(CatanGameStateResponse state, int playerId)
+    {
+        var vertexOwner = state.Vertices.ToDictionary(v => v.VertexId, v => v.OwnerPlayerId);
+
+        var edgesByVertex = new Dictionary<int, List<EdgeKey>>();
+        foreach (var edge in state.Edges)
+        {
+            var key = new EdgeKey(edge.smallerVertexId, edge.biggerVertexId);
+            if (!edgesByVertex.TryGetValue(edge.smallerVertexId, out var l1))
+                edgesByVertex[edge.smallerVertexId] = l1 = [];
+            l1.Add(key);
+            if (!edgesByVertex.TryGetValue(edge.biggerVertexId, out var l2))
+                edgesByVertex[edge.biggerVertexId] = l2 = [];
+            l2.Add(key);
+        }
+
+        var playerEdges = state.Edges
+            .Where(e => e.OwnerPlayerId == playerId)
+            .Select(e => new EdgeKey(e.smallerVertexId, e.biggerVertexId))
+            .ToHashSet();
+
+        var result = new HashSet<EdgeKey>();
+        foreach (var edge in state.Edges.Where(e => e.OwnerPlayerId is null))
+        {
+            var key = new EdgeKey(edge.smallerVertexId, edge.biggerVertexId);
+            if (IsReachableEndpoint(edge.smallerVertexId, key, playerId, vertexOwner, edgesByVertex, playerEdges) ||
+                IsReachableEndpoint(edge.biggerVertexId, key, playerId, vertexOwner, edgesByVertex, playerEdges))
+                result.Add(key);
+        }
+        return result;
+    }
+
+    private static bool IsReachableEndpoint(
+        int vertexId,
+        EdgeKey targetEdge,
+        int playerId,
+        Dictionary<int, int?> vertexOwner,
+        Dictionary<int, List<EdgeKey>> edgesByVertex,
+        HashSet<EdgeKey> playerEdges)
+    {
+        if (!vertexOwner.TryGetValue(vertexId, out var owner))
+            return false;
+        if (owner == playerId)
+            return true;
+        if (owner is not null)
+            return false;
+        if (!edgesByVertex.TryGetValue(vertexId, out var adjacent))
+            return false;
+        return adjacent.Any(e => e != targetEdge && playerEdges.Contains(e));
+    }
+
+    private static HashSet<int> ComputeVillageTargets(CatanGameStateResponse state, int playerId)
+    {
+        var roadEndpoints = state.Edges
+            .Where(e => e.OwnerPlayerId == playerId)
+            .SelectMany(e => new[] { e.smallerVertexId, e.biggerVertexId })
+            .ToHashSet();
+
+        var occupied = state.Vertices
+            .Where(v => v.OwnerPlayerId is not null)
+            .Select(v => v.VertexId)
+            .ToHashSet();
+
+        var adjacentVertices = new Dictionary<int, List<int>>();
+        foreach (var edge in state.Edges)
+        {
+            if (!adjacentVertices.TryGetValue(edge.smallerVertexId, out var la))
+                adjacentVertices[edge.smallerVertexId] = la = [];
+            la.Add(edge.biggerVertexId);
+            if (!adjacentVertices.TryGetValue(edge.biggerVertexId, out var lb))
+                adjacentVertices[edge.biggerVertexId] = lb = [];
+            lb.Add(edge.smallerVertexId);
+        }
+
+        var result = new HashSet<int>();
+        foreach (var vertex in state.Vertices.Where(v => v.OwnerPlayerId is null))
+        {
+            if (!roadEndpoints.Contains(vertex.VertexId))
+                continue;
+            if (adjacentVertices.TryGetValue(vertex.VertexId, out var neighbors) && neighbors.Any(n => occupied.Contains(n)))
+                continue;
+            result.Add(vertex.VertexId);
+        }
+        return result;
+    }
+
+    private static HashSet<int> ComputeCityTargets(CatanGameStateResponse state, int playerId)
+        => state.Vertices
+            .Where(v => v.OwnerPlayerId == playerId
+                && string.Equals(v.BuildingType, "aldeia", StringComparison.OrdinalIgnoreCase))
+            .Select(v => v.VertexId)
+            .ToHashSet();
 }

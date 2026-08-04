@@ -99,6 +99,7 @@ public class LobbyDetalheSalaResponse
     public bool CanCurrentUserStart { get; set; }
     public bool AllPlayersReady { get; set; }
     public int MinJogadores { get; set; }
+    public DateTime? GameStartedAtUtc { get; set; }
     public List<LobbyJogadorResponse> Jogadores { get; set; } = [];
 }
 
@@ -134,5 +135,6 @@ public class LobbyIniciarJogoResponse
 {
     public int SalaId { get; set; }
     public LobbyFaseSala Fase { get; set; } = LobbyFaseSala.InGame;
+    public DateTime? GameStartedAtUtc { get; set; }
     public string RedirectPath { get; set; } = string.Empty;
 }

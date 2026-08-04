@@ -17,6 +17,7 @@ public sealed class CatanGameSessionState
     public bool HasRolledDiceThisTurn { get; set; }
     public int? LastDice1 { get; set; }
     public int? LastDice2 { get; set; }
+    public Dictionary<int, int> PendingDiscardByPlayerId { get; set; } = [];
     public List<CatanResourceGainState> LastRollResourceGains { get; set; } = [];
     public List<CatanRollHistoryEntryState> RollHistory { get; set; } = [];
     public long NextTradeOfferId { get; set; } = 1;
@@ -33,6 +34,7 @@ public sealed class CatanBankState
 
     public Dictionary<string, int> ResourceCounts { get; set; } = [];
     public int DevelopmentCardCount { get; set; } = InitialDevelopmentCardCount;
+    public List<string> DevelopmentCardDeck { get; set; } = [];
 
     public static CatanBankState CreateDefault()
     {
@@ -46,7 +48,8 @@ public sealed class CatanBankState
                 ["trigo"] = InitialResourceCountPerType,
                 ["pedra"] = InitialResourceCountPerType
             },
-            DevelopmentCardCount = InitialDevelopmentCardCount
+            DevelopmentCardCount = InitialDevelopmentCardCount,
+            DevelopmentCardDeck = []
         };
     }
 }
@@ -88,6 +91,7 @@ public sealed class CatanPlayerState
     public int RemainingSettlements { get; set; }
     public int RemainingCities { get; set; }
     public Dictionary<string, int> Resources { get; set; } = [];
+    public Dictionary<string, int> DevelopmentCards { get; set; } = [];
 }
 
 public sealed class CatanBoardState

@@ -1,0 +1,46 @@
+.resource-discard-overlay {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    min-width: auto;
+    z-index: 34;
+    pointer-events: auto;
+}
+
+.resource-discard-overlay ::deep .resource-discard-panel {
+    border: 1px solid rgba(15, 23, 42, 0.16);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(250, 250, 250, 0.95) 100%);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+    backdrop-filter: blur(6px);
+    border-radius: 16px;
+    min-width: 280px;
+}
+
+.resource-discard-progress {
+    opacity: 0.8;
+}
+
+.discard-resource-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px;
+    min-height: 36px;
+}
+
+.discard-resource-row--selected {
+    box-sizing: border-box;
+    margin-top: 2px;
+}
+
+@media (max-width: 960px) {
+    .resource-discard-overlay {
+        width: calc(100% - 32px);
+    }
+
+    .discard-resource-row {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+}

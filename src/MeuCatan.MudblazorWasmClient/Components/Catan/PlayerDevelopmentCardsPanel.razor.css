@@ -1,0 +1,16 @@
+.development-card-panel {
+    display: flex;
+    align-items: flex-end;
+    min-height: 94px;
+    box-sizing: border-box;
+}
+
+.development-card-list {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    overflow-x: auto;
+    min-height: 94px;
+    padding: 6px 6px 0 0;
+    box-sizing: border-box;
+}

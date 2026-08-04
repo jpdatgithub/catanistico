@@ -11,6 +11,10 @@ public static class GameActionTypes
 {
     public const string PlaceInitialSettlement = "place-initial-settlement";
     public const string PlaceInitialRoad = "place-initial-road";
+    public const string BuyDevelopmentCard = "buy-development-card";
+    public const string BuildRoad = "build-road";
+    public const string BuildVillage = "build-village";
+    public const string BuildCity = "build-city";
     public const string RollDice = "roll-dice";
     public const string EndTurn = "end-turn";
     public const string OfferTrade = "offer-trade";
@@ -18,6 +22,16 @@ public static class GameActionTypes
     public const string AcceptTrade = "accept-trade";
     public const string DeclineTrade = "decline-trade";
     public const string EditTrade = "edit-trade";
+    public const string DiscardResources = "discard-resources";
+}
+
+public static class DevelopmentCardTypes
+{
+    public const string Knight = "cavaleiro";
+    public const string VictoryPoint = "ponto-de-vitoria";
+    public const string RoadBuilder = "roadbuilder";
+    public const string Plus2Resources = "plus2resources";
+    public const string Monopoly = "monopoly";
 }
 
 public class GameSessionResponse
@@ -45,6 +59,8 @@ public class GamePlayerStateResponse
     public int RemainingSettlements { get; set; }
     public int RemainingCities { get; set; }
     public Dictionary<string, int> Resources { get; set; } = [];
+    public Dictionary<string, int> DevelopmentCards { get; set; } = [];
+    public int HiddenDevelopmentCardCount { get; set; }
     public Dictionary<string, int> BankTradeRates { get; set; } = [];
 }
 
@@ -102,6 +118,7 @@ public class CatanGameStateResponse
     public List<GameResourceGainResponse> LastRollResourceGains { get; set; } = [];
     public List<RollHistoryEntryResponse> RollHistory { get; set; } = [];
     public int? RobberTileId { get; set; }
+    public Dictionary<int, int> PendingDiscardByPlayerId { get; set; } = [];
     public List<TradeOfferResponse> ActiveTradeOffers { get; set; } = [];
     public List<CatanTileResponse> Tiles { get; set; } = [];
     public List<CatanVertexResponse> Vertices { get; set; } = [];

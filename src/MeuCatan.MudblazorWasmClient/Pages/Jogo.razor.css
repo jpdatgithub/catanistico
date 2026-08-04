@@ -34,20 +34,88 @@
     flex: 1 1 auto;
 }
 
+.game-board-overlay-actions {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    pointer-events: auto;
+}
+
+.game-board-overlay-actions .resource-actions {
+    padding: 8px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.22);
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+}
+
 .game-resource-bar {
     flex: 0 0 auto;
 }
 
 .game-resource-bar-contents {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    align-items: flex-end;
+    justify-content: flex-start;
     gap: 12px;
     width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
 }
 
-.game-resource-bar-contents> :first-child {
+.game-resource-panel-slot {
     flex: 1 1 auto;
+    min-width: 0;
+    min-height: 94px;
+}
+
+.game-development-cards-slot {
+    flex: 0 0 416px;
+    width: 416px;
+    min-width: 416px;
+    min-height: 94px;
+}
+
+.game-action-panel-slot {
+    flex: 0 0 auto;
+}
+
+.game-resource-panel-slot ::deep .resource-card-shell,
+.game-development-cards-slot ::deep .resource-card-shell,
+.game-action-panel-slot ::deep .resource-card-shell {
+    width: 72px;
+    height: 88px;
+}
+
+.game-resource-panel-slot ::deep .layer-middle,
+.game-development-cards-slot ::deep .layer-middle,
+.game-action-panel-slot ::deep .layer-middle {
+    transform: translate(3px, -3px);
+}
+
+.game-resource-panel-slot ::deep .layer-back,
+.game-development-cards-slot ::deep .layer-back,
+.game-action-panel-slot ::deep .layer-back {
+    transform: translate(6px, -6px);
+}
+
+.game-resource-panel-slot ::deep .resource-card,
+.game-development-cards-slot ::deep .resource-card,
+.game-action-panel-slot ::deep .resource-card {
+    border-radius: 7px;
+}
+
+.game-resource-panel-slot ::deep .resource-card .resource-token-icon,
+.game-development-cards-slot ::deep .resource-card .resource-token-icon,
+.game-action-panel-slot ::deep .resource-card .resource-token-icon {
+    width: 56px;
+    height: 56px;
 }
 
 .dice-action-button {
@@ -60,6 +128,7 @@
     display: flex;
     align-items: center;
     flex-wrap: nowrap;
+    flex: 0 0 auto;
 }
 
 .history-chat-list {
@@ -148,5 +217,14 @@
     .game-page-shell ::deep .game-sidebar-content {
         max-height: none;
         overflow: visible;
+    }
+
+    .game-development-cards-slot {
+        min-height: 94px;
+    }
+
+    .game-board-overlay-actions {
+        right: 12px;
+        bottom: 12px;
     }
 }

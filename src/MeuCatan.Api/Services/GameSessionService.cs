@@ -30,6 +30,32 @@ public sealed class CatanGameSessionService : IGameSessionService
     private const int SpecificHarborTradeRate = 2;
 
     private static readonly string[] TradableResources = ["madeira", "argila", "ovelha", "trigo", "pedra"];
+    private static readonly (string ResourceType, int Amount)[] DevelopmentCardCost =
+    [
+        ("ovelha", 1),
+        ("trigo", 1),
+        ("pedra", 1)
+    ];
+
+    private static readonly (string ResourceType, int Amount)[] RoadCost =
+    [
+        ("madeira", 1),
+        ("argila", 1)
+    ];
+
+    private static readonly (string ResourceType, int Amount)[] VillageCost =
+    [
+        ("madeira", 1),
+        ("argila", 1),
+        ("ovelha", 1),
+        ("trigo", 1)
+    ];
+
+    private static readonly (string ResourceType, int Amount)[] CityCost =
+    [
+        ("trigo", 2),
+        ("pedra", 3)
+    ];
 
     private static readonly (int X, int Y, int Z)[] OrderedOuterCoordinates =
     [
@@ -92,13 +118,15 @@ public sealed class CatanGameSessionService : IGameSessionService
                         RemainingRoads = 15,
                         RemainingSettlements = 5,
                         RemainingCities = 4,
-                        Resources = new Dictionary<string, int>()
+                        Resources = new Dictionary<string, int>(),
+                        DevelopmentCards = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
                     })
                     .ToList(),
                 Bank = CatanBankState.CreateDefault(),
                 Board = Create34TraditionalBoardState()
             };
 
+            InitializeDevelopmentDeck(session.Bank);
             session.CurrentPlayerId = session.SetupTurnOrder.First();
             store.Save(session);
             _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(session.SalaId, "session-created");
@@ -123,6 +151,7 @@ public sealed class CatanGameSessionService : IGameSessionService
             }
 
             EnsureBankInitialized(session);
+            EnsurePendingDiscardStateInitialized(session);
 
             if (RemoveExpiredTradeOffers(session, DateTime.UtcNow))
             {
@@ -154,10 +183,18 @@ public sealed class CatanGameSessionService : IGameSessionService
             }
 
             EnsureBankInitialized(session);
+            EnsurePendingDiscardStateInitialized(session);
 
             RemoveExpiredTradeOffers(session, DateTime.UtcNow);
 
-            if (session.CurrentPlayerId != usuarioId)
+            var isDiscardAction = string.Equals(request.ActionType, GameActionTypes.DiscardResources, StringComparison.OrdinalIgnoreCase);
+
+            if (!isDiscardAction && HasAnyPendingDiscards(session))
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("Existe descarte pendente após o resultado 7. Conclua os descartes para continuar o turno.");
+            }
+
+            if (session.CurrentPlayerId != usuarioId && !isDiscardAction)
             {
                 return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não pode agir agora.");
             }
@@ -240,6 +277,71 @@ public sealed class CatanGameSessionService : IGameSessionService
                     return bankTradeResult;
                 }
             }
+            else if (string.Equals(request.ActionType, GameActionTypes.BuyDevelopmentCard, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno || !session.HasRolledDiceThisTurn)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode comprar uma carta de desenvolvimento após rolar os dados.");
+                }
+
+                var buyDevelopmentCardResult = TryBuyDevelopmentCard(session, actingPlayer);
+                if (buyDevelopmentCardResult is not null)
+                {
+                    return buyDevelopmentCardResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.BuildRoad, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno || !session.HasRolledDiceThisTurn)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode construir uma estrada após rolar os dados.");
+                }
+
+                var buildRoadResult = TryBuildRoad(session, actingPlayer, request.SmallerVertexId, request.BiggerVertexId);
+                if (buildRoadResult is not null)
+                {
+                    return buildRoadResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.BuildVillage, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno || !session.HasRolledDiceThisTurn)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode construir um vilarejo após rolar os dados.");
+                }
+
+                var buildVillageResult = TryBuildVillage(session, actingPlayer, request.VertexId);
+                if (buildVillageResult is not null)
+                {
+                    return buildVillageResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.BuildCity, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno || !session.HasRolledDiceThisTurn)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode construir uma cidade após rolar os dados.");
+                }
+
+                var buildCityResult = TryBuildCity(session, actingPlayer, request.VertexId);
+                if (buildCityResult is not null)
+                {
+                    return buildCityResult;
+                }
+            }
+            else if (isDiscardAction)
+            {
+                if (session.Phase != GameTipoFase.Turno || !session.HasRolledDiceThisTurn)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode descartar durante o turno após rolar os dados.");
+                }
+
+                var discardResult = TryDiscardResources(session, actingPlayer, request.OfferedResources);
+                if (discardResult is not null)
+                {
+                    return discardResult;
+                }
+            }
             else
             {
                 return LobbyOperationResult<GameSessionResponse>.Validation("Tipo de ação não suportado.");
@@ -258,31 +360,13 @@ public sealed class CatanGameSessionService : IGameSessionService
         int usuarioId,
         int? vertexId)
     {
-        if (session.AwaitingInitialRoadPlacement)
+        var validationError = ValidateInitialSettlementPlacement(session, vertexId);
+        if (validationError is not null)
         {
-            return LobbyOperationResult<GameSessionResponse>.Validation("Você precisa posicionar a estrada inicial antes de colocar outra aldeia.");
+            return LobbyOperationResult<GameSessionResponse>.Validation(validationError);
         }
 
-        if (vertexId is null)
-        {
-            return LobbyOperationResult<GameSessionResponse>.Validation("Informe um vértice para posicionar a aldeia.");
-        }
-
-        var vertex = session.Board.Vertices.FirstOrDefault(item => item.VertexId == vertexId.Value);
-        if (vertex is null || vertex.VertexId == 0)
-        {
-            return LobbyOperationResult<GameSessionResponse>.Validation("Vértice inválido.");
-        }
-
-        if (vertex.OwnerPlayerId is not null)
-        {
-            return LobbyOperationResult<GameSessionResponse>.Validation("Esse vértice já possui construção.");
-        }
-
-        if (HasAdjacentSettlement(session, vertex.VertexId))
-        {
-            return LobbyOperationResult<GameSessionResponse>.Validation("Não é possível posicionar uma aldeia ao lado de outra já construída.");
-        }
+        var vertex = session.Board.Vertices.First(item => item.VertexId == vertexId!.Value);
 
         vertex.OwnerPlayerId = usuarioId;
         vertex.BuildingType = "aldeia";
@@ -296,6 +380,37 @@ public sealed class CatanGameSessionService : IGameSessionService
         if (IsSecondSetupSettlementPlacement(session))
         {
             GrantSetupResourcesFromVertex(session, actingPlayer, vertex);
+        }
+
+        return null;
+    }
+
+    private static string? ValidateInitialSettlementPlacement(CatanGameSessionState session, int? vertexId)
+    {
+        if (session.AwaitingInitialRoadPlacement)
+        {
+            return "Você precisa posicionar a estrada inicial antes de colocar outra aldeia.";
+        }
+
+        if (vertexId is null)
+        {
+            return "Informe um vértice para posicionar a aldeia.";
+        }
+
+        var vertex = session.Board.Vertices.FirstOrDefault(item => item.VertexId == vertexId.Value);
+        if (vertex is null || vertex.VertexId == 0)
+        {
+            return "Vértice inválido.";
+        }
+
+        if (vertex.OwnerPlayerId is not null)
+        {
+            return "Esse vértice já possui construção.";
+        }
+
+        if (HasAdjacentSettlement(session, vertex.VertexId))
+        {
+            return "Não é possível posicionar uma aldeia ao lado de outra já construída.";
         }
 
         return null;
@@ -383,9 +498,15 @@ public sealed class CatanGameSessionService : IGameSessionService
         session.LastDice2 = dice2;
         session.HasRolledDiceThisTurn = true;
         session.LastRollResourceGains = [];
+        session.PendingDiscardByPlayerId.Clear();
 
         var rolledTotal = dice1 + dice2;
-        if (rolledTotal != 7)
+        if (rolledTotal == 7)
+        {
+            session.ActiveTradeOffers.Clear();
+            InitializePendingDiscardsForRobberRoll(session);
+        }
+        else
         {
             DistributeResourcesForRoll(session, rolledTotal);
         }
@@ -424,12 +545,227 @@ public sealed class CatanGameSessionService : IGameSessionService
             return LobbyOperationResult<GameSessionResponse>.Validation("Você precisa rolar os dados antes de passar o turno.");
         }
 
+        if (HasAnyPendingDiscards(session))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Ainda existem descartes pendentes após o resultado 7.");
+        }
+
         var currentIndex = session.Players.FindIndex(player => player.UsuarioId == session.CurrentPlayerId);
         var nextIndex = (currentIndex + 1) % session.Players.Count;
         session.CurrentPlayerId = session.Players[nextIndex].UsuarioId;
         session.HasRolledDiceThisTurn = false;
 
         return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryBuyDevelopmentCard(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer)
+    {
+        EnsureBankInitialized(session);
+
+        if (session.Bank.DevelopmentCardDeck.Count == 0 || session.Bank.DevelopmentCardCount <= 0)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Não há mais cartas de desenvolvimento disponíveis no banco.");
+        }
+
+        if (!HasRequiredResources(actingPlayer, DevelopmentCardCost))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui os recursos necessários para comprar uma carta de desenvolvimento.");
+        }
+
+        foreach (var cost in DevelopmentCardCost)
+        {
+            actingPlayer.Resources[cost.ResourceType] -= cost.Amount;
+            ReturnToBank(session, cost.ResourceType, cost.Amount);
+        }
+
+        var developmentCardType = session.Bank.DevelopmentCardDeck[^1];
+        session.Bank.DevelopmentCardDeck.RemoveAt(session.Bank.DevelopmentCardDeck.Count - 1);
+        session.Bank.DevelopmentCardCount = session.Bank.DevelopmentCardDeck.Count;
+
+        actingPlayer.DevelopmentCards ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        actingPlayer.DevelopmentCards.TryGetValue(developmentCardType, out var ownedCount);
+        actingPlayer.DevelopmentCards[developmentCardType] = ownedCount + 1;
+
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryBuildRoad(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        int? smallerVertexId,
+        int? biggerVertexId)
+    {
+        if (smallerVertexId is null || biggerVertexId is null)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Informe os vértices da aresta para construir a estrada.");
+
+        if (!HasRequiredResources(actingPlayer, RoadCost))
+            return LobbyOperationResult<GameSessionResponse>.Validation("Recursos insuficientes para construir uma estrada.");
+
+        if (actingPlayer.RemainingRoads <= 0)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui mais peças de estrada disponíveis.");
+
+        var edgeKey = new EdgeKey(smallerVertexId.Value, biggerVertexId.Value);
+        var edge = session.Board.Edges.FirstOrDefault(e =>
+            e.EdgeKey.smallerVertexId == edgeKey.smallerVertexId &&
+            e.EdgeKey.biggerVertexId == edgeKey.biggerVertexId);
+
+        if (edge is null)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Aresta inválida.");
+
+        if (edge.OwnerPlayerId is not null)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Essa aresta já possui uma estrada.");
+
+        if (!IsValidRoadPlacement(session.Board, actingPlayer.UsuarioId, edgeKey))
+            return LobbyOperationResult<GameSessionResponse>.Validation("A estrada deve ser conectada à sua rede de construções.");
+
+        foreach (var cost in RoadCost)
+        {
+            actingPlayer.Resources[cost.ResourceType] -= cost.Amount;
+            ReturnToBank(session, cost.ResourceType, cost.Amount);
+        }
+
+        edge.OwnerPlayerId = actingPlayer.UsuarioId;
+        actingPlayer.RemainingRoads = Math.Max(0, actingPlayer.RemainingRoads - 1);
+
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryBuildVillage(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        int? vertexId)
+    {
+        if (vertexId is null)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Informe um vértice para construir o vilarejo.");
+
+        if (!HasRequiredResources(actingPlayer, VillageCost))
+            return LobbyOperationResult<GameSessionResponse>.Validation("Recursos insuficientes para construir um vilarejo.");
+
+        if (actingPlayer.RemainingSettlements <= 0)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui mais peças de vilarejo disponíveis.");
+
+        var vertex = session.Board.Vertices.FirstOrDefault(v => v.VertexId == vertexId.Value);
+        if (vertex is null)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Vértice inválido.");
+
+        if (vertex.OwnerPlayerId is not null)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Esse vértice já está ocupado.");
+
+        if (HasAdjacentSettlement(session, vertexId.Value))
+            return LobbyOperationResult<GameSessionResponse>.Validation("Não é possível construir um vilarejo adjacente a outra construção (regra de distância).");
+
+        var playerRoadEndpoints = session.Board.Edges
+            .Where(e => e.OwnerPlayerId == actingPlayer.UsuarioId)
+            .SelectMany(e => new[] { e.EdgeKey.smallerVertexId, e.EdgeKey.biggerVertexId })
+            .ToHashSet();
+
+        if (!playerRoadEndpoints.Contains(vertexId.Value))
+            return LobbyOperationResult<GameSessionResponse>.Validation("O vilarejo deve estar conectado à sua rede de estradas.");
+
+        foreach (var cost in VillageCost)
+        {
+            actingPlayer.Resources[cost.ResourceType] -= cost.Amount;
+            ReturnToBank(session, cost.ResourceType, cost.Amount);
+        }
+
+        vertex.OwnerPlayerId = actingPlayer.UsuarioId;
+        vertex.BuildingType = SettlementBuildingType;
+        actingPlayer.Pontos += 1;
+        actingPlayer.RemainingSettlements = Math.Max(0, actingPlayer.RemainingSettlements - 1);
+
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryBuildCity(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        int? vertexId)
+    {
+        if (vertexId is null)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Informe um vértice para construir a cidade.");
+
+        if (!HasRequiredResources(actingPlayer, CityCost))
+            return LobbyOperationResult<GameSessionResponse>.Validation("Recursos insuficientes para construir uma cidade.");
+
+        if (actingPlayer.RemainingCities <= 0)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui mais peças de cidade disponíveis.");
+
+        var vertex = session.Board.Vertices.FirstOrDefault(v => v.VertexId == vertexId.Value);
+        if (vertex is null)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Vértice inválido.");
+
+        if (vertex.OwnerPlayerId != actingPlayer.UsuarioId)
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode construir uma cidade sobre um vilarejo próprio.");
+
+        if (!string.Equals(vertex.BuildingType, SettlementBuildingType, StringComparison.OrdinalIgnoreCase))
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode construir uma cidade sobre um vilarejo.");
+
+        foreach (var cost in CityCost)
+        {
+            actingPlayer.Resources[cost.ResourceType] -= cost.Amount;
+            ReturnToBank(session, cost.ResourceType, cost.Amount);
+        }
+
+        vertex.BuildingType = CityBuildingType;
+        actingPlayer.Pontos += 1;
+        actingPlayer.RemainingCities = Math.Max(0, actingPlayer.RemainingCities - 1);
+        actingPlayer.RemainingSettlements = Math.Min(5, actingPlayer.RemainingSettlements + 1);
+
+        return null;
+    }
+
+    private static bool IsValidRoadPlacement(CatanBoardState board, int playerId, EdgeKey targetEdge)
+    {
+        var edgesByVertex = BuildEdgesByVertex(board);
+        var vertexById = board.Vertices.ToDictionary(v => v.VertexId);
+        var playerEdgeKeys = board.Edges
+            .Where(e => e.OwnerPlayerId == playerId)
+            .Select(e => e.EdgeKey)
+            .ToHashSet();
+
+        return IsReachableRoadEndpoint(targetEdge.smallerVertexId, targetEdge, playerId, vertexById, edgesByVertex, playerEdgeKeys)
+            || IsReachableRoadEndpoint(targetEdge.biggerVertexId, targetEdge, playerId, vertexById, edgesByVertex, playerEdgeKeys);
+    }
+
+    private static bool IsReachableRoadEndpoint(
+        int vertexId,
+        EdgeKey targetEdge,
+        int playerId,
+        Dictionary<int, CatanVertexState> vertexById,
+        Dictionary<int, List<EdgeKey>> edgesByVertex,
+        HashSet<EdgeKey> playerEdgeKeys)
+    {
+        if (!vertexById.TryGetValue(vertexId, out var vertex))
+            return false;
+
+        if (vertex.OwnerPlayerId == playerId)
+            return true;
+
+        if (vertex.OwnerPlayerId is not null)
+            return false;
+
+        if (!edgesByVertex.TryGetValue(vertexId, out var adjacentEdges))
+            return false;
+
+        return adjacentEdges.Any(e => e != targetEdge && playerEdgeKeys.Contains(e));
+    }
+
+    private static Dictionary<int, List<EdgeKey>> BuildEdgesByVertex(CatanBoardState board)
+    {
+        var result = new Dictionary<int, List<EdgeKey>>();
+        foreach (var edge in board.Edges)
+        {
+            var key = edge.EdgeKey;
+            if (!result.TryGetValue(key.smallerVertexId, out var list1))
+                result[key.smallerVertexId] = list1 = [];
+            list1.Add(key);
+            if (!result.TryGetValue(key.biggerVertexId, out var list2))
+                result[key.biggerVertexId] = list2 = [];
+            list2.Add(key);
+        }
+        return result;
     }
 
     private static LobbyOperationResult<GameSessionResponse>? TryOfferTrade(
@@ -571,6 +907,11 @@ public sealed class CatanGameSessionService : IGameSessionService
         return session.ActiveTradeOffers.RemoveAll(offer => offer.ExpiresAtUtc <= nowUtc) > 0;
     }
 
+    private static void EnsurePendingDiscardStateInitialized(CatanGameSessionState session)
+    {
+        session.PendingDiscardByPlayerId ??= [];
+    }
+
     private static void EnsureBankInitialized(CatanGameSessionState session)
     {
         session.Bank ??= CatanBankState.CreateDefault();
@@ -588,6 +929,131 @@ public sealed class CatanGameSessionService : IGameSessionService
         {
             session.Bank.DevelopmentCardCount = 0;
         }
+
+        session.Bank.DevelopmentCardDeck ??= [];
+        if (session.Bank.DevelopmentCardDeck.Count == 0 && session.Bank.DevelopmentCardCount > 0)
+        {
+            InitializeDevelopmentDeck(session.Bank, session.Bank.DevelopmentCardCount);
+        }
+        else
+        {
+            session.Bank.DevelopmentCardCount = session.Bank.DevelopmentCardDeck.Count;
+        }
+
+        foreach (var player in session.Players)
+        {
+            player.DevelopmentCards ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        EnsurePendingDiscardStateInitialized(session);
+    }
+
+    private static void InitializePendingDiscardsForRobberRoll(CatanGameSessionState session)
+    {
+        EnsurePendingDiscardStateInitialized(session);
+        session.PendingDiscardByPlayerId.Clear();
+
+        foreach (var player in session.Players)
+        {
+            var resourceCount = player.Resources?.Values.Sum() ?? 0;
+            if (resourceCount < 8)
+            {
+                continue;
+            }
+
+            var requiredDiscardCount = resourceCount / 2;
+            if (requiredDiscardCount > 0)
+            {
+                session.PendingDiscardByPlayerId[player.UsuarioId] = requiredDiscardCount;
+            }
+        }
+    }
+
+    private static bool HasAnyPendingDiscards(CatanGameSessionState session)
+    {
+        EnsurePendingDiscardStateInitialized(session);
+        return session.PendingDiscardByPlayerId.Any(entry => entry.Value > 0);
+    }
+
+    private static int GetPendingDiscardAmountForPlayer(CatanGameSessionState session, int usuarioId)
+    {
+        EnsurePendingDiscardStateInitialized(session);
+        return session.PendingDiscardByPlayerId.TryGetValue(usuarioId, out var amount) && amount > 0
+            ? amount
+            : 0;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryDiscardResources(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        IReadOnlyDictionary<string, int>? offeredResources)
+    {
+        var requiredDiscardCount = GetPendingDiscardAmountForPlayer(session, actingPlayer.UsuarioId);
+        if (requiredDiscardCount <= 0)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui descarte pendente.");
+        }
+
+        var normalizedDiscard = NormalizeTradeResources(offeredResources);
+        var totalDiscarded = normalizedDiscard.Values.Sum();
+        if (totalDiscarded != requiredDiscardCount)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation(
+                $"Você deve descartar exatamente {requiredDiscardCount} carta(s).");
+        }
+
+        foreach (var discard in normalizedDiscard)
+        {
+            if (!TradableResources.Contains(discard.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("O descarte contém um recurso inválido.");
+            }
+
+            var playerAmount = actingPlayer.Resources.GetValueOrDefault(discard.Key);
+            if (discard.Value > playerAmount)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation(
+                    "Você não possui recursos suficientes para esse descarte.");
+            }
+        }
+
+        foreach (var discard in normalizedDiscard)
+        {
+            actingPlayer.Resources.TryGetValue(discard.Key, out var currentAmount);
+            actingPlayer.Resources[discard.Key] = currentAmount - discard.Value;
+            ReturnToBank(session, discard.Key, discard.Value);
+        }
+
+        session.PendingDiscardByPlayerId.Remove(actingPlayer.UsuarioId);
+        return null;
+    }
+
+    private static void InitializeDevelopmentDeck(CatanBankState bank, int? remainingCardCount = null)
+    {
+        var deck = new List<string>(CatanBankState.InitialDevelopmentCardCount);
+        deck.AddRange(Enumerable.Repeat(DevelopmentCardTypes.Knight, 14));
+        deck.AddRange(Enumerable.Repeat(DevelopmentCardTypes.VictoryPoint, 5));
+        deck.AddRange(Enumerable.Repeat(DevelopmentCardTypes.RoadBuilder, 2));
+        deck.AddRange(Enumerable.Repeat(DevelopmentCardTypes.Plus2Resources, 2));
+        deck.AddRange(Enumerable.Repeat(DevelopmentCardTypes.Monopoly, 2));
+
+        for (var index = deck.Count - 1; index > 0; index--)
+        {
+            var swapIndex = Random.Shared.Next(index + 1);
+            (deck[index], deck[swapIndex]) = (deck[swapIndex], deck[index]);
+        }
+
+        var count = Math.Clamp(remainingCardCount ?? deck.Count, 0, deck.Count);
+        bank.DevelopmentCardDeck = deck.Take(count).ToList();
+        bank.DevelopmentCardCount = bank.DevelopmentCardDeck.Count;
+    }
+
+    private static bool HasRequiredResources(
+        CatanPlayerState player,
+        IEnumerable<(string ResourceType, int Amount)> requiredResources)
+    {
+        return requiredResources.All(resource =>
+            player.Resources.GetValueOrDefault(resource.ResourceType) >= resource.Amount);
     }
 
     private static bool TryWithdrawFromBank(CatanGameSessionState session, string resourceType, int amount = 1)
@@ -635,28 +1101,36 @@ public sealed class CatanGameSessionService : IGameSessionService
         {
             foreach (var vertex in GetVerticesAdjacentToTile(session.Board, tile))
             {
-                if (vertex.OwnerPlayerId is null
-                    || !string.Equals(vertex.BuildingType, SettlementBuildingType, StringComparison.OrdinalIgnoreCase))
-                {
+                if (vertex.OwnerPlayerId is null)
                     continue;
-                }
+
+                var isSettlement = string.Equals(vertex.BuildingType, SettlementBuildingType, StringComparison.OrdinalIgnoreCase);
+                var isCity = string.Equals(vertex.BuildingType, CityBuildingType, StringComparison.OrdinalIgnoreCase);
+
+                if (!isSettlement && !isCity)
+                    continue;
 
                 if (!playersById.TryGetValue(vertex.OwnerPlayerId.Value, out var owner))
-                {
                     continue;
+
+                var production = isCity ? 2 : 1;
+                var withdrawn = 0;
+                for (var p = 0; p < production; p++)
+                {
+                    if (!TryWithdrawFromBank(session, tile.ResourceType))
+                        break;
+                    withdrawn++;
                 }
 
-                if (!TryWithdrawFromBank(session, tile.ResourceType))
-                {
+                if (withdrawn == 0)
                     continue;
-                }
 
                 owner.Resources.TryGetValue(tile.ResourceType, out var currentAmount);
-                owner.Resources[tile.ResourceType] = currentAmount + 1;
+                owner.Resources[tile.ResourceType] = currentAmount + withdrawn;
 
                 var gainKey = (owner.UsuarioId, tile.ResourceType);
                 gainsByPlayerAndResource.TryGetValue(gainKey, out var gainedAmount);
-                gainsByPlayerAndResource[gainKey] = gainedAmount + 1;
+                gainsByPlayerAndResource[gainKey] = gainedAmount + withdrawn;
             }
         }
 
@@ -1025,39 +1499,86 @@ public sealed class CatanGameSessionService : IGameSessionService
     private static GameSessionResponse ToResponse(CatanGameSessionState session, int usuarioId)
     {
         EnsureBankInitialized(session);
+        EnsurePendingDiscardStateInitialized(session);
 
         var currentPlayer = session.Players.First(player => player.UsuarioId == session.CurrentPlayerId);
         var canCurrentUserAct = currentPlayer.UsuarioId == usuarioId;
+        var pendingDiscardForCurrentUser = GetPendingDiscardAmountForPlayer(session, usuarioId);
+        var hasPendingDiscardForCurrentUser = pendingDiscardForCurrentUser > 0;
+        var hasAnyPendingDiscards = HasAnyPendingDiscards(session);
         var isSetupPhase = session.Phase == GameTipoFase.SetupInicial;
         var canPlaceInitialSettlement = isSetupPhase && canCurrentUserAct && !session.AwaitingInitialRoadPlacement;
         var canPlaceInitialRoad = isSetupPhase && canCurrentUserAct && session.AwaitingInitialRoadPlacement && session.PendingInitialRoadFromVertexId is not null;
         var pendingRoadVertexId = session.PendingInitialRoadFromVertexId;
 
         var isTurnPhase = session.Phase == GameTipoFase.Turno;
-        var canRollDice = isTurnPhase && canCurrentUserAct && !session.HasRolledDiceThisTurn;
-        var canEndTurn = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn;
-        var canTradeWithBank = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn;
+        var canRollDice = isTurnPhase && canCurrentUserAct && !session.HasRolledDiceThisTurn && !hasAnyPendingDiscards;
+        var canEndTurn = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn && !hasAnyPendingDiscards;
+        var canTradeWithBank = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn && !hasAnyPendingDiscards;
+        var canBuyDevelopmentCard = isTurnPhase
+            && canCurrentUserAct
+            && session.HasRolledDiceThisTurn
+            && !hasAnyPendingDiscards
+            && session.Bank.DevelopmentCardDeck.Count > 0
+            && HasRequiredResources(currentPlayer, DevelopmentCardCost);
+        var canBuildRoad = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn
+            && !hasAnyPendingDiscards
+            && currentPlayer.RemainingRoads > 0
+            && HasRequiredResources(currentPlayer, RoadCost);
+        var canBuildVillage = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn
+            && !hasAnyPendingDiscards
+            && currentPlayer.RemainingSettlements > 0
+            && HasRequiredResources(currentPlayer, VillageCost);
+        var canBuildCity = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn
+            && !hasAnyPendingDiscards
+            && currentPlayer.RemainingCities > 0
+            && HasRequiredResources(currentPlayer, CityCost)
+            && session.Board.Vertices.Any(v => v.OwnerPlayerId == currentPlayer.UsuarioId
+                && string.Equals(v.BuildingType, SettlementBuildingType, StringComparison.OrdinalIgnoreCase));
 
         var availableActions = new List<string>();
-        if (canPlaceInitialSettlement)
+        if (hasPendingDiscardForCurrentUser)
         {
-            availableActions.Add(GameActionTypes.PlaceInitialSettlement);
+            availableActions.Add(GameActionTypes.DiscardResources);
         }
-        if (canPlaceInitialRoad)
+        else
         {
-            availableActions.Add(GameActionTypes.PlaceInitialRoad);
-        }
-        if (canRollDice)
-        {
-            availableActions.Add(GameActionTypes.RollDice);
-        }
-        if (canEndTurn)
-        {
-            availableActions.Add(GameActionTypes.EndTurn);
-        }
-        if (canTradeWithBank)
-        {
-            availableActions.Add(GameActionTypes.TradeWithBank);
+            if (canPlaceInitialSettlement)
+            {
+                availableActions.Add(GameActionTypes.PlaceInitialSettlement);
+            }
+            if (canPlaceInitialRoad)
+            {
+                availableActions.Add(GameActionTypes.PlaceInitialRoad);
+            }
+            if (canRollDice)
+            {
+                availableActions.Add(GameActionTypes.RollDice);
+            }
+            if (canEndTurn)
+            {
+                availableActions.Add(GameActionTypes.EndTurn);
+            }
+            if (canTradeWithBank)
+            {
+                availableActions.Add(GameActionTypes.TradeWithBank);
+            }
+            if (canBuyDevelopmentCard)
+            {
+                availableActions.Add(GameActionTypes.BuyDevelopmentCard);
+            }
+            if (canBuildRoad)
+            {
+                availableActions.Add(GameActionTypes.BuildRoad);
+            }
+            if (canBuildVillage)
+            {
+                availableActions.Add(GameActionTypes.BuildVillage);
+            }
+            if (canBuildCity)
+            {
+                availableActions.Add(GameActionTypes.BuildCity);
+            }
         }
 
         var result = new GameSessionResponse
@@ -1082,6 +1603,12 @@ public sealed class CatanGameSessionService : IGameSessionService
                     RemainingSettlements = player.RemainingSettlements,
                     RemainingCities = player.RemainingCities,
                     Resources = new Dictionary<string, int>(player.Resources),
+                    DevelopmentCards = player.UsuarioId == usuarioId
+                        ? new Dictionary<string, int>(player.DevelopmentCards, StringComparer.OrdinalIgnoreCase)
+                        : [],
+                    HiddenDevelopmentCardCount = player.UsuarioId == usuarioId
+                        ? 0
+                        : player.DevelopmentCards.Values.Sum(),
                     BankTradeRates = ComputeBankTradeRatesForPlayer(session, player)
                 })
                 .ToList(),
@@ -1103,6 +1630,9 @@ public sealed class CatanGameSessionService : IGameSessionService
                     ResourceCounts = new Dictionary<string, int>(session.Bank.ResourceCounts, StringComparer.OrdinalIgnoreCase),
                     DevelopmentCardCount = session.Bank.DevelopmentCardCount
                 },
+                PendingDiscardByPlayerId = session.PendingDiscardByPlayerId
+                    .Where(entry => entry.Value > 0)
+                    .ToDictionary(entry => entry.Key, entry => entry.Value),
                 LastRollResourceGains = session.LastRollResourceGains
                     .Select(gain => new GameResourceGainResponse
                     {
@@ -1165,7 +1695,7 @@ public sealed class CatanGameSessionService : IGameSessionService
                         VertexId = vertex.VertexId,
                         OwnerPlayerId = vertex.OwnerPlayerId,
                         BuildingType = vertex.BuildingType,
-                        IsAvailableForAction = vertex.OwnerPlayerId is null && canPlaceInitialSettlement,
+                        IsAvailableForAction = canPlaceInitialSettlement && ValidateInitialSettlementPlacement(session, vertex.VertexId) is null,
                         Resources = vertex.Resources,
                         Ports = vertex.Ports,
                         Position = vertex.Position

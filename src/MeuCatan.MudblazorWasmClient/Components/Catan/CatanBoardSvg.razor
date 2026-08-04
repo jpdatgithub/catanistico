@@ -89,12 +89,16 @@ else
                 {
                     if (edge.OwnerPlayerId is not null)
                     {
-                        <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)"
-                              stroke="@GetRoadColor(edge.OwnerPlayerId)" stroke-width="9" stroke-linecap="round"
-                              pointer-events="none" />
+                        var roadCenterX = (edge.X1 + edge.X2) / 2.0;
+                        var roadCenterY = (edge.Y1 + edge.Y2) / 2.0;
+                        var roadRotation = GetEdgeAngleDegrees(edge);
+                        var roadScale = GetRoadLengthScale(edge);
+
+                        <RoadMarker X="@roadCenterX" Y="@roadCenterY" Color="@GetRoadColor(edge.OwnerPlayerId)"
+                                    RotationDegrees="@roadRotation" LengthScale="@roadScale" />
                     }
 
-                    if (edge.IsAvailableForAction)
+                    if (edge.IsAvailableForAction || ShouldHighlightEdge(edge))
                     {
                         <line x1="@F(edge.X1)" y1="@F(edge.Y1)" x2="@F(edge.X2)" y2="@F(edge.Y2)" stroke="#22c55e"
                               stroke-opacity="0.55" stroke-width="16" stroke-linecap="round" class="edge-action"
@@ -105,7 +109,7 @@ else
 
                 @foreach (var vertex in model.Vertices)
                 {
-                    if (vertex.IsAvailableForAction)
+                    if (vertex.IsAvailableForAction || ShouldHighlightVertex(vertex))
                     {
                         <circle cx="@F(vertex.X)" cy="@F(vertex.Y)" r="18" fill="#86efac" fill-opacity="0.45" stroke="#16a34a"
                                 stroke-width="2" class="vertex-action" style="cursor:pointer;" pointer-events="all"
@@ -120,6 +124,11 @@ else
                     {
                         <VillageMarker X="@vertex.X" Y="@vertex.Y" roofColor="@GetVillageRoofColor(vertex.OwnerPlayerId)"
                                        bodyColor="@GetVillageBodyColor(vertex.OwnerPlayerId)" />
+                    }
+
+                    if (IsCity(vertex))
+                    {
+                        <CityMarker X="@vertex.X" Y="@vertex.Y" Color="@GetOwnerColor(vertex.OwnerPlayerId)" />
                     }
                 }
             </g>
@@ -141,6 +150,8 @@ else
     [Parameter] public bool FillParent { get; set; }
     [Parameter] public EventCallback<int> OnVertexClicked { get; set; }
     [Parameter] public EventCallback<EdgeKey> OnEdgeClicked { get; set; }
+    [Parameter] public IReadOnlySet<int>? HighlightedVertexIds { get; set; }
+    [Parameter] public IReadOnlySet<EdgeKey>? HighlightedEdgeKeys { get; set; }
 
     // Transform state: translate(_tx, _ty) scale(_scale)
     private double _tx;
@@ -247,6 +258,12 @@ else
         return OnVertexClicked.InvokeAsync(vertexId);
     }
 
+    private bool ShouldHighlightVertex(CatanSvgVertex vertex)
+        => HighlightedVertexIds?.Contains(vertex.VertexId) == true;
+
+    private bool ShouldHighlightEdge(CatanSvgEdge edge)
+        => HighlightedEdgeKeys?.Contains(new EdgeKey(edge.smallerVertexId, edge.biggerVertexId)) == true;
+
     private Task HandleEdgeClick(CatanSvgEdge edge)
     {
         return OnEdgeClicked.InvokeAsync(new EdgeKey(edge.smallerVertexId, edge.biggerVertexId));
@@ -286,11 +303,26 @@ else
             && string.Equals(vertex.BuildingType, "aldeia", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsCity(CatanSvgVertex vertex)
+    {
+        return vertex.OwnerPlayerId is not null
+            && string.Equals(vertex.BuildingType, "cidade", StringComparison.OrdinalIgnoreCase);
+    }
+
     private string GetVillageBodyColor(int? ownerPlayerId) => GetOwnerColor(ownerPlayerId);
 
     private string GetVillageRoofColor(int? ownerPlayerId) => GetOwnerColor(ownerPlayerId);
 
     private string GetRoadColor(int? ownerPlayerId) => GetOwnerColor(ownerPlayerId);
+
+    private static double GetEdgeAngleDegrees(CatanSvgEdge edge)
+        => Math.Atan2(edge.Y2 - edge.Y1, edge.X2 - edge.X1) * 180.0 / Math.PI;
+
+    private static double GetRoadLengthScale(CatanSvgEdge edge)
+    {
+        var length = Math.Sqrt(Math.Pow(edge.X2 - edge.X1, 2) + Math.Pow(edge.Y2 - edge.Y1, 2));
+        return Math.Max(0.7, length / 36.0);
+    }
 
     private string GetOwnerColor(int? ownerPlayerId)
     {

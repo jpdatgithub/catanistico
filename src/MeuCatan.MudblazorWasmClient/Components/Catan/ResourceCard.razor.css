@@ -16,6 +16,10 @@
     cursor: default;
 }
 
+.resource-card-button.is-disabled-muted .resource-card-shell {
+    opacity: 0.6;
+}
+
 .resource-card-button.is-selected .resource-card {
     outline: 2px solid rgba(239, 68, 68, 0.55);
     outline-offset: 2px;
@@ -160,6 +164,26 @@
     --resource-accent: #8a939c;
     background: linear-gradient(160deg, #d3dae0 0%, #8a939c 100%);
     color: #1d2329;
+}
+
+.resource-cavaleiro {
+    --resource-accent: #64748b;
+}
+
+.resource-ponto-de-vitoria {
+    --resource-accent: #ca8a04;
+}
+
+.resource-roadbuilder {
+    --resource-accent: #b45309;
+}
+
+.resource-plus2resources {
+    --resource-accent: #059669;
+}
+
+.resource-monopoly {
+    --resource-accent: #be123c;
 }
 
 .resource-default {

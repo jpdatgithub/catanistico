@@ -1,5 +1,5 @@
 <button type="button"
-        class="resource-card-button @(Token ? "resource-card-button--token" : string.Empty) @(OnClick.HasDelegate ? "is-clickable" : string.Empty) @(Selected ? "is-selected" : string.Empty)"
+        class="resource-card-button @(Token ? "resource-card-button--token" : string.Empty) @(OnClick.HasDelegate ? "is-clickable" : string.Empty) @(Selected ? "is-selected" : string.Empty) @(Disabled && GrayscaleWhenDisabled ? "is-disabled-muted" : string.Empty)"
         disabled="@Disabled" @onclick="HandleClick" title="@DisplayName" aria-label="@AccessibleLabel">
     @if (Token)
     {
@@ -52,6 +52,9 @@
     public bool Disabled { get; set; }
 
     [Parameter]
+    public bool GrayscaleWhenDisabled { get; set; }
+
+    [Parameter]
     public bool Selected { get; set; }
 
     [Parameter]
@@ -64,6 +67,11 @@
         "ovelha" => "resource-ovelha",
         "trigo" => "resource-trigo",
         "pedra" => "resource-pedra",
+        "cavaleiro" => "resource-cavaleiro",
+        "ponto-de-vitoria" => "resource-ponto-de-vitoria",
+        "roadbuilder" => "resource-roadbuilder",
+        "plus2resources" => "resource-plus2resources",
+        "monopoly" => "resource-monopoly",
         _ => "resource-default"
     };
 
@@ -74,6 +82,11 @@
         "ovelha" => "Ovelha",
         "trigo" => "Trigo",
         "pedra" => "Pedra",
+        "cavaleiro" => "Cavaleiro",
+        "ponto-de-vitoria" => "Ponto de vitoria",
+        "roadbuilder" => "Construtor de estradas",
+        "plus2resources" => "Mais 2 recursos",
+        "monopoly" => "Monopolio",
         _ => ResourceType
     };
 

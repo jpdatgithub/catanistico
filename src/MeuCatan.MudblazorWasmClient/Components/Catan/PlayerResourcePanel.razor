@@ -1,21 +1,14 @@
-<MudPaper Class="resource-panel pa-4">
+<div class="resource-panel">
     @* <MudText Typo="Typo.h6" Class="mb-2">Sua mão de recursos</MudText> *@
 
-    @if (_visibleResources.Count == 0)
-    {
-        <MudText Typo="Typo.body2">Você ainda não tem cartas de recurso.</MudText>
-    }
-    else
-    {
-        <div class="resource-hand-row">
-            @foreach (var resource in _visibleResources)
-            {
-                <ResourceCard ResourceType="@resource.Key" Count="@resource.Value" Disabled="@(!CanInteract)"
-                              OnClick="@(() => HandleResourceClick(resource.Key))" />
-            }
-        </div>
-    }
-</MudPaper>
+    <div class="resource-hand-row">
+        @foreach (var resource in _visibleResources)
+        {
+            <ResourceCard ResourceType="@resource.Key" Count="@resource.Value" Disabled="@(!CanInteract)"
+                          OnClick="@(() => HandleResourceClick(resource.Key))" />
+        }
+    </div>
+</div>
 
 @code {
     private static readonly string[] ResourceOrder =

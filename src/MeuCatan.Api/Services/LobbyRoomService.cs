@@ -50,8 +50,13 @@ public sealed class LobbyRoomService : ILobbyRoomService
 
     public LobbyListarSalasResponse ListarSalas(int usuarioId)
     {
-        return _roomStore.Read(store =>
+        return _roomStore.Write(store =>
         {
+            foreach (var sala in store.Rooms.ToList())
+            {
+                CleanupExpiredGuestsInRoom(store, sala);
+            }
+
             var salas = store.Rooms
                 .OrderByDescending(s => s.CriadaEmUtc)
                 .Select(s => new LobbySalaResumoResponse
@@ -508,6 +513,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
             }
 
             sala.Fase = LobbyFaseSala.InGame;
+            sala.GameStartedAtUtc = DateTime.UtcNow;
             store.Save(sala);
             _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "game-started");
 
@@ -515,6 +521,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
             {
                 SalaId = sala.SalaId,
                 Fase = sala.Fase,
+                GameStartedAtUtc = sala.GameStartedAtUtc,
                 RedirectPath = $"/jogo/{sala.SalaId}"
             });
         });
@@ -575,6 +582,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
             GameType = sala.GameType,
             GameDisplayName = sala.GameDisplayName,
             Fase = sala.Fase,
+            GameStartedAtUtc = sala.GameStartedAtUtc,
             CurrentUserIsInRoom = currentUserIsInRoom,
             CurrentUserIsCreator = currentUserIsCreator,
             CurrentUserIsReady = currentUser?.IsReady ?? false,

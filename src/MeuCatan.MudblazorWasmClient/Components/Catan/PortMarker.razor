@@ -42,11 +42,15 @@
     <!-- balão do porto -->
     <g transform="translate(@F(LabelX),@F(LabelY))">
         <!-- corpo do balão -->
-        <rect x="-28" y="-15" width="56" height="32" rx="10" fill="white" stroke="#4b2e1c" stroke-width="1.5" />
-        <!-- texto -->
-        <text x="0" y="6" text-anchor="middle" font-size="14" font-family="sans-serif" font-weight="bold"
+        <rect x="-34" y="-15" width="68" height="32" rx="10" fill="white" stroke="#4b2e1c" stroke-width="1.5" />
+        @if (ResourceIconPath is not null)
+        {
+            <image href="@ResourceIconPath" x="-26" y="-11" width="22" height="22" />
+        }
+        <!-- preço da troca -->
+        <text x="@PriceTextX" y="6" text-anchor="middle" font-size="14" font-family="sans-serif" font-weight="bold"
               fill="#4b2e1c">
-            @Label
+            @TradeRate
         </text>
     </g>
 </g>
@@ -67,6 +71,22 @@
 
     [Parameter]
     public string Label { get; set; } = "3:1";
+
+    private string? ResourceIconPath => Label.ToLowerInvariant() switch
+    {
+        "wood_2to1" => "images/resources/madeira.svg",
+        "brick_2to1" => "images/resources/argila.svg",
+        "sheep_2to1" => "images/resources/ovelha.svg",
+        "wheat_2to1" => "images/resources/trigo.svg",
+        "ore_2to1" => "images/resources/pedra.svg",
+        _ => null
+    };
+
+    private string TradeRate => Label.EndsWith("_2to1", StringComparison.OrdinalIgnoreCase)
+        ? "2 : 1"
+        : "3 : 1";
+
+    private int PriceTextX => ResourceIconPath is null ? 0 : 12;
 
 
     private const double PierLength = 45;

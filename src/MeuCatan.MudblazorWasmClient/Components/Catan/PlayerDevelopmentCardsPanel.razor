@@ -1,0 +1,40 @@
+@using MudBlazor
+
+<div class="development-card-panel">
+    <div class="development-card-list">
+        @foreach (var card in _visibleCards)
+        {
+            <ResourceCard ResourceType="@card.Key" Count="@card.Value" Disabled="true" />
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly string[] DevelopmentCardOrder =
+    [
+        DevelopmentCardTypes.Knight,
+        DevelopmentCardTypes.VictoryPoint,
+        DevelopmentCardTypes.RoadBuilder,
+        DevelopmentCardTypes.Plus2Resources,
+        DevelopmentCardTypes.Monopoly
+    ];
+
+    [Parameter, EditorRequired]
+    public GamePlayerStateResponse Player { get; set; } = default!;
+
+    private List<KeyValuePair<string, int>> _visibleCards = [];
+
+    protected override void OnParametersSet()
+    {
+        _visibleCards = (Player.DevelopmentCards ?? [])
+            .Where(card => card.Value > 0)
+            .OrderBy(card =>
+            {
+                var index = Array.IndexOf(DevelopmentCardOrder, card.Key);
+                return index >= 0 ? index : int.MaxValue;
+            })
+            .ThenBy(card => card.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+}
