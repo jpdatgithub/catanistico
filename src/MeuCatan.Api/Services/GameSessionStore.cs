@@ -26,7 +26,8 @@ public sealed class InMemoryGameSessionStore : IGameSessionStore
         {
             return mutation(new GameSessionStoreWriteContext(
                 salaId => _sessions.TryGetValue(salaId, out var session) ? session : null,
-                session => _sessions[session.SalaId] = session));
+                session => _sessions[session.SalaId] = session,
+                salaId => _sessions.Remove(salaId)));
         }
     }
 }
@@ -50,11 +51,16 @@ public sealed class GameSessionStoreWriteContext
 {
     private readonly Func<int, CatanGameSessionState?> _getSession;
     private readonly Action<CatanGameSessionState> _save;
+    private readonly Func<int, bool> _remove;
 
-    internal GameSessionStoreWriteContext(Func<int, CatanGameSessionState?> getSession, Action<CatanGameSessionState> save)
+    internal GameSessionStoreWriteContext(
+        Func<int, CatanGameSessionState?> getSession,
+        Action<CatanGameSessionState> save,
+        Func<int, bool> remove)
     {
         _getSession = getSession;
         _save = save;
+        _remove = remove;
     }
 
     public CatanGameSessionState? GetSessionOrDefault(int salaId)
@@ -65,5 +71,10 @@ public sealed class GameSessionStoreWriteContext
     public void Save(CatanGameSessionState session)
     {
         _save(session);
+    }
+
+    public bool Remove(int salaId)
+    {
+        return _remove(salaId);
     }
 }

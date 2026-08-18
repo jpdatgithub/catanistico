@@ -1,0 +1,78 @@
+.history-chat-list {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 4px;
+    height: 92px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.history-chat-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.2;
+    flex-wrap: wrap;
+}
+
+.history-dice-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.history-player-avatar {
+    width: 18px;
+    height: 18px;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+}
+
+.history-resource-token {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    font-size: 26px;
+    margin-left: 1px;
+    --resource-token-icon-width: 100%;
+    --resource-token-icon-height: 100%;
+}
+
+.history-resource-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.history-resource-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-wrap: wrap;
+}
+
+.history-resource-stack {
+    position: relative;
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    margin-left: 1px;
+}
+
+.history-resource-stack-token {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    --resource-token-icon-width: 32px;
+    --resource-token-icon-height: 32px;
+}
+
+.history-caption {
+    font-size: 0.75rem;
+    opacity: 0.9;
+}

@@ -1,0 +1,51 @@
+@using MeuCatan.ClassLib.Contracts
+@using Microsoft.AspNetCore.Components
+
+<div Class="turn-legend-balloon pa-3" Elevation="0">
+    <MudText Typo="Typo.body2">@Legenda</MudText>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public GameSessionResponse Session { get; set; } = default!;
+
+    private string Legenda => GerarLegenda();
+
+    private string GerarLegenda()
+    {
+        var currentPlayerNome = string.IsNullOrWhiteSpace(Session.CurrentPlayerNome)
+            ? "Jogador atual"
+            : Session.CurrentPlayerNome;
+
+        var pendingDiscard = Session.CatanState?.PendingDiscardByPlayerId;
+        if (pendingDiscard is { Count: > 0 })
+        {
+            if (pendingDiscard.Count > 1)
+            {
+                return "Estão descartando...";
+            }
+
+            var pendingPlayerId = pendingDiscard.Keys.First();
+            var pendingPlayer = Session.Players.FirstOrDefault(player => player.UsuarioId == pendingPlayerId);
+            var pendingPlayerNome = string.IsNullOrWhiteSpace(pendingPlayer?.Nome)
+                ? currentPlayerNome
+                : pendingPlayer.Nome;
+
+            return $"{pendingPlayerNome} está descartando...";
+        }
+
+        if (Session.AvailableActions.Contains(GameActionTypes.MoveRobber)
+            || Session.AvailableActions.Contains(GameActionTypes.ChooseRobberVictim))
+        {
+            return $"{currentPlayerNome} está movendo o ladrão...";
+        }
+
+        if (Session.Phase == GameTipoFase.Turno
+            && Session.CatanState?.HasRolledDiceThisTurn == false)
+        {
+            return $"{currentPlayerNome} está rolando os dados...";
+        }
+
+        return $"Vez de {currentPlayerNome}.";
+    }
+}

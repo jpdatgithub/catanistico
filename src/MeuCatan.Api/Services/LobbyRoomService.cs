@@ -14,12 +14,12 @@ public interface ILobbyRoomService
     LobbyOperationResult<LobbyDetalheSalaResponse> AlterarPronto(int salaId, int usuarioId, bool isReady);
     LobbyOperationResult<LobbyIniciarJogoResponse> IniciarJogo(int salaId, int usuarioId);
     LobbyOperationResult<LobbyDetalheSalaResponse> UpdatePlayerPresence(int salaId, int usuarioId, bool inLobby);
+    void ExecutarManutencaoPresenca();
 }
 
 public sealed class LobbyRoomService : ILobbyRoomService
 {
-    private static readonly TimeSpan GuestInactivityGraceWindow = TimeSpan.FromSeconds(45);
-    private static readonly TimeSpan PresenceOnlineWindow = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan PresenceOnlineWindow = TimeSpan.FromMinutes(5);
     private const string PresenceSourceRoom = "sala";
     private const string PresenceSourceLobby = "lobby";
 
@@ -54,7 +54,18 @@ public sealed class LobbyRoomService : ILobbyRoomService
         {
             foreach (var sala in store.Rooms.ToList())
             {
-                CleanupExpiredGuestsInRoom(store, sala);
+                MarkPlayersOfflineByInactivity(store, sala, DateTime.UtcNow);
+
+                var salaAtualizada = store.GetRoomOrDefault(sala.SalaId);
+                if (salaAtualizada is null)
+                {
+                    continue;
+                }
+
+                if (TryRemoveRoomWhenAllPlayersOffline(store, salaAtualizada))
+                {
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "room-removed");
+                }
             }
 
             var salas = store.Rooms
@@ -80,6 +91,31 @@ public sealed class LobbyRoomService : ILobbyRoomService
             {
                 Salas = salas
             };
+        });
+    }
+
+    public void ExecutarManutencaoPresenca()
+    {
+        _roomStore.Write(store =>
+        {
+            var nowUtc = DateTime.UtcNow;
+            foreach (var sala in store.Rooms.ToList())
+            {
+                MarkPlayersOfflineByInactivity(store, sala, nowUtc);
+
+                var salaAtualizada = store.GetRoomOrDefault(sala.SalaId);
+                if (salaAtualizada is null)
+                {
+                    continue;
+                }
+
+                if (TryRemoveRoomWhenAllPlayersOffline(store, salaAtualizada))
+                {
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "room-removed");
+                }
+            }
+
+            return 0;
         });
     }
 
@@ -118,9 +154,10 @@ public sealed class LobbyRoomService : ILobbyRoomService
 
         return _roomStore.Write(store =>
         {
-            if (TryGetUserRoom(store, usuarioId) is not null)
+            var salaAtualDoUsuario = TryGetUserRoom(store, usuarioId);
+            if (salaAtualDoUsuario is not null)
             {
-                return LobbyOperationResult<LobbyCriarSalaResponse>.Conflict("Você já está em uma sala. Saia da sala atual para criar outra.");
+                RemoverJogadorDaSala(store, salaAtualDoUsuario, usuarioId);
             }
 
             var salaId = store.NextRoomId();
@@ -177,24 +214,34 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
-            var hadCleanup = CleanupExpiredGuestsInRoom(store, sala);
-            if (hadCleanup)
-            {
-                sala = store.GetRoomOrDefault(salaId);
-                if (sala is null)
-                {
-                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
-                    return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
-                }
+            MarkPlayersOfflineByInactivity(store, sala, DateTime.UtcNow);
 
-                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (TryRemoveRoomWhenAllPlayersOffline(store, sala))
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
             if (sala.Jogadores.TryGetValue(usuarioId, out var jogador))
             {
+                var wasDisconnected = !jogador.IsConnected;
+                jogador.IsConnected = true;
                 jogador.LastSeenUtc = DateTime.UtcNow;
                 jogador.PresenceSource = PresenceSourceRoom;
                 store.Save(sala);
+
+                if (wasDisconnected && sala.Fase == LobbyFaseSala.InGame)
+                {
+                    _gameSessionService.SetPlayerConnection(salaId, usuarioId, true);
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-reconnected");
+                }
             }
 
             return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
@@ -206,10 +253,6 @@ public sealed class LobbyRoomService : ILobbyRoomService
         return _roomStore.Write(store =>
         {
             var salaAtualDoUsuario = TryGetUserRoom(store, usuarioId);
-            if (salaAtualDoUsuario is not null && salaAtualDoUsuario.SalaId != salaId)
-            {
-                return LobbyOperationResult<LobbyDetalheSalaResponse>.Conflict("Você já está em uma sala. Saia da sala atual para entrar em outra.");
-            }
 
             var sala = store.GetRoomOrDefault(salaId);
             if (sala is null)
@@ -217,24 +260,35 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
-            var hadCleanup = CleanupExpiredGuestsInRoom(store, sala);
-            if (hadCleanup)
-            {
-                sala = store.GetRoomOrDefault(salaId);
-                if (sala is null)
-                {
-                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
-                    return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
-                }
+            MarkPlayersOfflineByInactivity(store, sala, DateTime.UtcNow);
 
-                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (TryRemoveRoomWhenAllPlayersOffline(store, sala))
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
             if (sala.Jogadores.ContainsKey(usuarioId))
             {
+                var wasDisconnected = !sala.Jogadores[usuarioId].IsConnected;
+                sala.Jogadores[usuarioId].IsConnected = true;
                 sala.Jogadores[usuarioId].LastSeenUtc = DateTime.UtcNow;
                 sala.Jogadores[usuarioId].PresenceSource = PresenceSourceRoom;
                 store.Save(sala);
+
+                if (wasDisconnected && sala.Fase == LobbyFaseSala.InGame)
+                {
+                    _gameSessionService.SetPlayerConnection(salaId, usuarioId, true);
+                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-reconnected");
+                }
+
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
             }
 
@@ -255,6 +309,11 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 {
                     return LobbyOperationResult<LobbyDetalheSalaResponse>.Forbidden("Código da sala inválido.");
                 }
+            }
+
+            if (salaAtualDoUsuario is not null)
+            {
+                RemoverJogadorDaSala(store, salaAtualDoUsuario, usuarioId);
             }
 
             sala.Jogadores.Add(usuarioId, new LobbyPlayerState
@@ -287,21 +346,31 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 return LobbyOperationResult<LobbySairSalaResponse>.NotFound("Sala não encontrada.");
             }
 
-            if (CleanupExpiredGuestsInRoom(store, sala))
-            {
-                sala = store.GetRoomOrDefault(salaId);
-                if (sala is null)
-                {
-                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
-                    return LobbyOperationResult<LobbySairSalaResponse>.NotFound("Sala não encontrada.");
-                }
+            MarkPlayersOfflineByInactivity(store, sala, DateTime.UtcNow);
 
-                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbySairSalaResponse>.NotFound("Sala não encontrada.");
             }
 
-            if (!sala.Jogadores.Remove(usuarioId))
+            if (TryRemoveRoomWhenAllPlayersOffline(store, sala))
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbySairSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (!sala.Jogadores.TryGetValue(usuarioId, out var jogador))
             {
                 return LobbyOperationResult<LobbySairSalaResponse>.Conflict("Você não está nesta sala.");
+            }
+
+            sala.Jogadores.Remove(usuarioId);
+
+            if (sala.Fase == LobbyFaseSala.InGame)
+            {
+                _gameSessionService.RemovePlayerFromSession(salaId, usuarioId);
             }
 
             if (sala.Jogadores.Count > 0 && sala.CriadorId == usuarioId)
@@ -319,12 +388,6 @@ public sealed class LobbyRoomService : ILobbyRoomService
             {
                 store.Remove(salaId);
                 _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
-            }
-            else if (sala.Fase == LobbyFaseSala.InGame)
-            {
-                sala.Fase = LobbyFaseSala.Setup;
-                store.Save(sala);
-                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
             }
             else
             {
@@ -350,16 +413,19 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
-            if (CleanupExpiredGuestsInRoom(store, sala))
-            {
-                sala = store.GetRoomOrDefault(salaId);
-                if (sala is null)
-                {
-                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
-                    return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
-                }
+            MarkPlayersOfflineByInactivity(store, sala, DateTime.UtcNow);
 
-                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (TryRemoveRoomWhenAllPlayersOffline(store, sala))
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
             if (sala.CriadorId != usuarioId)
@@ -412,16 +478,19 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
-            if (CleanupExpiredGuestsInRoom(store, sala))
-            {
-                sala = store.GetRoomOrDefault(salaId);
-                if (sala is null)
-                {
-                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
-                    return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
-                }
+            MarkPlayersOfflineByInactivity(store, sala, DateTime.UtcNow);
 
-                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (TryRemoveRoomWhenAllPlayersOffline(store, sala))
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
             if (!sala.Jogadores.TryGetValue(usuarioId, out var jogador))
@@ -459,16 +528,19 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 return LobbyOperationResult<LobbyIniciarJogoResponse>.NotFound("Sala não encontrada.");
             }
 
-            if (CleanupExpiredGuestsInRoom(store, sala))
-            {
-                sala = store.GetRoomOrDefault(salaId);
-                if (sala is null)
-                {
-                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
-                    return LobbyOperationResult<LobbyIniciarJogoResponse>.NotFound("Sala não encontrada.");
-                }
+            MarkPlayersOfflineByInactivity(store, sala, DateTime.UtcNow);
 
-                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyIniciarJogoResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (TryRemoveRoomWhenAllPlayersOffline(store, sala))
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyIniciarJogoResponse>.NotFound("Sala não encontrada.");
             }
 
             if (sala.CriadorId != usuarioId)
@@ -537,16 +609,19 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
-            if (CleanupExpiredGuestsInRoom(store, sala))
-            {
-                sala = store.GetRoomOrDefault(salaId);
-                if (sala is null)
-                {
-                    _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
-                    return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
-                }
+            MarkPlayersOfflineByInactivity(store, sala, DateTime.UtcNow);
 
-                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-left");
+            sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (TryRemoveRoomWhenAllPlayersOffline(store, sala))
+            {
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "room-removed");
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
             }
 
             if (!sala.Jogadores.TryGetValue(usuarioId, out var jogador))
@@ -554,9 +629,17 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 return LobbyOperationResult<LobbyDetalheSalaResponse>.Forbidden("Você não participa desta sala.");
             }
 
+            var wasDisconnected = !jogador.IsConnected;
+            jogador.IsConnected = true;
             jogador.LastSeenUtc = DateTime.UtcNow;
             jogador.PresenceSource = inLobby ? PresenceSourceLobby : PresenceSourceRoom;
             store.Save(sala);
+
+            if (wasDisconnected && sala.Fase == LobbyFaseSala.InGame)
+            {
+                _gameSessionService.SetPlayerConnection(salaId, usuarioId, true);
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-reconnected");
+            }
 
             return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
         });
@@ -598,7 +681,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 .OrderBy(j => j.EntrouEmUtc)
                 .Select(j =>
                 {
-                    var isOnline = DateTime.UtcNow - j.LastSeenUtc <= PresenceOnlineWindow;
+                    var isOnline = IsPlayerOnline(j);
                     return new LobbyJogadorResponse
                     {
                         UsuarioId = j.UsuarioId,
@@ -615,53 +698,101 @@ public sealed class LobbyRoomService : ILobbyRoomService
         };
     }
 
-    private static bool CleanupExpiredGuestsInRoom(LobbyRoomStoreWriteContext store, LobbyRoomState sala)
+    private void RemoveRoomAndGameSession(LobbyRoomStoreWriteContext store, LobbyRoomState sala)
     {
-        if (sala.Fase == LobbyFaseSala.InGame)
-        {
-            return false;
-        }
+        store.Remove(sala.SalaId);
+        _gameSessionService.DeleteSession(sala.SalaId);
+    }
 
-        var cutoffUtc = DateTime.UtcNow - GuestInactivityGraceWindow;
-        var staleGuestIds = sala.Jogadores.Values
-            .Where(j => j.IsGuest && j.LastSeenUtc < cutoffUtc)
-            .Select(j => j.UsuarioId)
-            .ToList();
-
-        if (staleGuestIds.Count == 0)
-        {
-            return false;
-        }
-
-        foreach (var guestId in staleGuestIds)
-        {
-            sala.Jogadores.Remove(guestId);
-
-            if (sala.Jogadores.Count > 0 && sala.CriadorId == guestId)
-            {
-                var novoCriador = sala.Jogadores.Values
-                    .OrderBy(j => j.EntrouEmUtc)
-                    .First();
-
-                sala.CriadorId = novoCriador.UsuarioId;
-                sala.CriadorNome = novoCriador.Nome;
-                novoCriador.IsReady = false;
-            }
-        }
-
+    private bool TryRemoveRoomWhenAllPlayersOffline(LobbyRoomStoreWriteContext store, LobbyRoomState sala)
+    {
         if (sala.Jogadores.Count == 0)
         {
-            store.Remove(sala.SalaId);
+            RemoveRoomAndGameSession(store, sala);
             return true;
         }
 
-        store.Save(sala);
+        if (sala.Jogadores.Values.Any(IsPlayerOnline))
+        {
+            return false;
+        }
+
+        RemoveRoomAndGameSession(store, sala);
         return true;
+    }
+
+    private static bool IsPlayerOnline(LobbyPlayerState jogador)
+    {
+        return jogador.IsConnected;
+    }
+
+    private void MarkPlayersOfflineByInactivity(LobbyRoomStoreWriteContext store, LobbyRoomState sala, DateTime nowUtc)
+    {
+        var stalePlayers = sala.Jogadores.Values
+            .Where(j => j.IsConnected && nowUtc - j.LastSeenUtc > PresenceOnlineWindow)
+            .ToList();
+
+        if (stalePlayers.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var player in stalePlayers)
+        {
+            player.IsConnected = false;
+            if (sala.Fase == LobbyFaseSala.InGame)
+            {
+                _gameSessionService.SetPlayerConnection(sala.SalaId, player.UsuarioId, false);
+            }
+
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "player-disconnected");
+        }
+
+        store.Save(sala);
     }
 
     private static LobbyRoomState? TryGetUserRoom(LobbyRoomStoreWriteContext store, int usuarioId)
     {
         return store.Rooms.FirstOrDefault(room => room.Jogadores.ContainsKey(usuarioId));
+    }
+
+    private void RemoverJogadorDaSala(LobbyRoomStoreWriteContext store, LobbyRoomState sala, int usuarioId)
+    {
+        if (!sala.Jogadores.Remove(usuarioId))
+        {
+            return;
+        }
+
+        if (sala.Jogadores.Count > 0 && sala.CriadorId == usuarioId)
+        {
+            var novoCriador = sala.Jogadores.Values
+                .OrderBy(j => j.EntrouEmUtc)
+                .First();
+
+            sala.CriadorId = novoCriador.UsuarioId;
+            sala.CriadorNome = novoCriador.Nome;
+            novoCriador.IsReady = false;
+        }
+
+        if (sala.Jogadores.Count == 0)
+        {
+            store.Remove(sala.SalaId);
+            if (sala.Fase == LobbyFaseSala.InGame)
+            {
+                _gameSessionService.DeleteSession(sala.SalaId);
+            }
+
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "room-removed");
+            return;
+        }
+
+        if (sala.Fase == LobbyFaseSala.InGame)
+        {
+            _gameSessionService.RemovePlayerFromSession(sala.SalaId, usuarioId);
+        }
+
+        store.Save(sala);
+        _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "player-left");
     }
 
     private LobbyOperationResult<LobbyJogoDisponivelResponse> ObterJogoOuErro(string? gameType)

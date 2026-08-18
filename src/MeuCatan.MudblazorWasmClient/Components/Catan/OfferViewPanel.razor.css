@@ -1,16 +1,3 @@
-.offer-view-panel-host ::deep .offer-view-panel {
-    border: 1px solid rgba(15, 23, 42, 0.14);
-    background: rgba(255, 255, 255, 0.86);
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
-    backdrop-filter: blur(6px);
-    border-radius: 8px;
-}
-
-.offer-view-panel-host ::deep .offer-avatar {
-    width: 28px;
-    height: 28px;
-}
-
 .offer-resource-section {
     display: grid;
     gap: 4px;
@@ -20,6 +7,59 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+}
+
+.offer-actions {
+    align-self: stretch;
+}
+
+.offer-participant-statuses {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+    max-width: 132px;
+}
+
+.offer-participant-avatar {
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    padding: 0;
+    position: relative;
+    width: 28px;
+    height: 28px;
+}
+
+.offer-participant-avatar:disabled {
+    cursor: default;
+}
+
+.offer-participant-response {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #94a3b8;
+    border-radius: 50%;
+    bottom: -3px;
+    display: inline-flex;
+    height: 14px;
+    justify-content: center;
+    position: absolute;
+    right: -3px;
+    width: 14px;
+}
+
+.offer-participant-response .mud-icon-root {
+    font-size: 11px;
+}
+
+.offer-participant-response--accepted {
+    background: #16a34a;
+    border-color: #fff;
+}
+
+.offer-participant-response--declined {
+    color: #b91c1c;
 }
 
 @media (max-width: 960px) {

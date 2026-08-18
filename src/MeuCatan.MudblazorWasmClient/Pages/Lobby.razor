@@ -127,8 +127,7 @@
                                 }
                                 else
                                 {
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                                               Disabled="@(_acaoEmAndamento || _usuarioEmAlgumaSala)"
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@_acaoEmAndamento"
                                                OnClick="() => EntrarSalaAsync(sala.SalaId)">
                                         Entrar
                                     </MudButton>
@@ -161,7 +160,7 @@
 
     private bool _podeCriarSala => _perfil is not null && !_perfil.IsGuest;
     private bool _usuarioEmAlgumaSala => _salas.Any(sala => sala.UsuarioNaSala);
-    private bool _criacaoDesabilitada => _criandoSala || _usuarioEmAlgumaSala;
+    private bool _criacaoDesabilitada => _criandoSala;
     private int CapacidadeMinimaSelecionada => JogoSelecionado?.MinPlayers ?? 2;
     private int CapacidadeMaximaSelecionada => JogoSelecionado?.MaxPlayers ?? 8;
     private LobbyJogoDisponivelResponse? JogoSelecionado => _jogosDisponiveis.FirstOrDefault(j => j.GameType ==
@@ -205,12 +204,6 @@ _novaSala.GameType);
             return;
         }
 
-        if (_usuarioEmAlgumaSala)
-        {
-            _erroGeral = "Você já está em uma sala. Saia da sala atual para criar outra.";
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(_novaSala.Nome))
         {
             _erroGeral = "Informe o nome da sala.";
@@ -250,13 +243,6 @@ _novaSala.GameType);
         _erroGeral = null;
         _acaoEmAndamento = true;
 
-        if (_usuarioEmAlgumaSala)
-        {
-            _acaoEmAndamento = false;
-            _erroGeral = "Você já está em uma sala. Saia da sala atual para entrar em outra.";
-            return;
-        }
-
         _codigoPrivadoPorSala.TryGetValue(salaId, out var codigoPrivado);
 
         var result = await AuthService.EntrarSalaAsync(salaId, codigoPrivado);
@@ -285,14 +271,6 @@ _novaSala.GameType);
         {
             _erroGeral = result.ErrorMessage;
             return;
-        }
-
-        var salaAtual = _salas.FirstOrDefault(sala => sala.SalaId == salaId);
-        if (salaAtual is not null)
-        {
-            salaAtual.UsuarioNaSala = false;
-            salaAtual.JogadoresAtuais = Math.Max(0, salaAtual.JogadoresAtuais - 1);
-            await InvokeAsync(StateHasChanged);
         }
 
         await AtualizarSalasSemCooldownAsync();

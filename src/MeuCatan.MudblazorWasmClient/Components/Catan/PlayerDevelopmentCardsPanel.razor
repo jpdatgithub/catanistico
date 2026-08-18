@@ -4,7 +4,9 @@
     <div class="development-card-list">
         @foreach (var card in _visibleCards)
         {
-            <ResourceCard ResourceType="@card.Key" Count="@card.Value" Disabled="true" />
+            var isPlayableCard = IsPlayableCard(card.Key);
+            <ResourceCard ResourceType="@card.Key" Count="@card.Value" Disabled="@(!isPlayableCard)"
+                          GrayscaleWhenDisabled="true" OnClick="@(() => HandleCardClickAsync(card.Key))" />
         }
     </div>
 </div>
@@ -22,6 +24,21 @@
     [Parameter, EditorRequired]
     public GamePlayerStateResponse Player { get; set; } = default!;
 
+    [Parameter]
+    public bool CanPlayKnight { get; set; }
+
+    [Parameter]
+    public bool CanPlayRoadBuilder { get; set; }
+
+    [Parameter]
+    public bool CanPlayPlus2Resources { get; set; }
+
+    [Parameter]
+    public bool CanPlayMonopoly { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnCardClicked { get; set; }
+
     private List<KeyValuePair<string, int>> _visibleCards = [];
 
     protected override void OnParametersSet()
@@ -35,6 +52,42 @@
             })
             .ThenBy(card => card.Key, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private bool IsPlayableCard(string cardType)
+    {
+        if (!OnCardClicked.HasDelegate)
+        {
+            return false;
+        }
+
+        if (string.Equals(cardType, DevelopmentCardTypes.Knight, StringComparison.OrdinalIgnoreCase))
+        {
+            return CanPlayKnight;
+        }
+
+        if (string.Equals(cardType, DevelopmentCardTypes.RoadBuilder, StringComparison.OrdinalIgnoreCase))
+        {
+            return CanPlayRoadBuilder;
+        }
+
+        if (string.Equals(cardType, DevelopmentCardTypes.Plus2Resources, StringComparison.OrdinalIgnoreCase))
+        {
+            return CanPlayPlus2Resources;
+        }
+
+        return string.Equals(cardType, DevelopmentCardTypes.Monopoly, StringComparison.OrdinalIgnoreCase)
+            && CanPlayMonopoly;
+    }
+
+    private Task HandleCardClickAsync(string cardType)
+    {
+        if (!IsPlayableCard(cardType))
+        {
+            return Task.CompletedTask;
+        }
+
+        return OnCardClicked.InvokeAsync(cardType);
     }
 
 }

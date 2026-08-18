@@ -1,10 +1,11 @@
 <div class="offer-view-panel-host">
-    <MudPaper Class="offer-view-panel pa-3" Elevation="6">
-        <MudStack Row="true" Spacing="2">
+    <MudPaper Class="pa-3" Elevation="6"
+              Style="border:1px solid rgba(15, 23, 42, 0.14); background:rgba(255, 255, 255, 0.86); box-shadow:0 10px 24px rgba(15, 23, 42, 0.12); backdrop-filter:blur(6px); border-radius:8px;">
+        <MudStack Row="true">
             <MudStack Class="flex-grow-1">
-                <MudStack Row="true">
-                    <MudAvatar Size="Size.Small" Class="offer-avatar"
-                               Style="@($"background-color:{AvatarColor}; color:#fff;")">
+                <MudStack Row="true" Spacing="1">
+                    <MudAvatar Size="Size.Small"
+                               Style="@($"width:28px; height:28px; background-color:{TopAvatarColor}; color:#fff;")">
                         <MudIcon Icon="@Icons.Material.Filled.Person" />
                     </MudAvatar>
                     <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Style="color:green;" />
@@ -16,9 +17,9 @@
                     </div>
                 </MudStack>
 
-                <MudStack Row="true">
-                    <MudAvatar Size="Size.Small" Class="offer-avatar"
-                               Style="@($"background-color:{ViewerAvatarColor}; color:#fff;")">
+                <MudStack Row="true" Spacing="1">
+                    <MudAvatar Size="Size.Small"
+                               Style="@($"width:28px; height:28px; background-color:{ViewerAvatarColor}; color:#fff;")">
                         <MudIcon Icon="@Icons.Material.Filled.Person" />
                     </MudAvatar>
                     <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Style="color:#dc2626;" />
@@ -31,19 +32,56 @@
                 </MudStack>
             </MudStack>
 
-            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.End">
-                <MudTooltip Text=" Recusar">
-                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Variant="Variant.Outlined"
-                                   Color="Color.Default" aria-label="Recusar" />
-                </MudTooltip>
-                <MudTooltip Text="Editar">
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Variant="Variant.Outlined"
-                                   Color="Color.Secondary" aria-label="Editar" />
-                </MudTooltip>
-                <MudTooltip Text="Aceitar">
-                    <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Variant="Variant.Filled"
-                                   Color="Color.Primary" aria-label="Aceitar" />
-                </MudTooltip>
+            <MudStack Class="offer-actions" Spacing="1" AlignItems="AlignItems.End" Justify="Justify.SpaceBetween">
+                @if (IsOfferer)
+                {
+                    <div class="offer-participant-statuses" aria-label="Respostas à oferta">
+                        @foreach (var player in OtherPlayers)
+                        {
+                            var accepted = Offer.AcceptedByPlayerId.GetValueOrDefault(player.UsuarioId);
+                            <MudTooltip
+                                Text="@(accepted ? $"Concluir troca com {player.Nome}" : $"Aguardando aceite de {player.Nome}")">
+                                <button class="offer-participant-avatar" disabled="@(!accepted)"
+                                        aria-label="@(accepted ? $"Concluir troca com {player.Nome}" : $"Aguardando aceite de {player.Nome}")"
+                                        @onclick="() => HandleExecuteAsync(player.UsuarioId)">
+                                    <MudAvatar Size="Size.Small"
+                                               Style="@($"width:28px; height:28px; background-color:{PlayerColorUtils.ToHex(player.Cor)}; color:#fff;")">
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" />
+                                    </MudAvatar>
+                                    <span
+                                        class="offer-participant-response @(accepted ? "offer-participant-response--accepted" : "offer-participant-response--declined")"
+                                        aria-label="@(accepted ? "Aceitou" : "Não aceitou")">
+                                        @if (!accepted)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.Close" />
+                                        }
+                                    </span>
+                                </button>
+                            </MudTooltip>
+                        }
+                    </div>
+                    <MudTooltip Text="Cancelar oferta">
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Variant="Variant.Outlined"
+                                       Color="Color.Default" aria-label="Cancelar oferta" OnClick="HandleDeclineAsync" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.End">
+                        <MudTooltip Text="Recusar">
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                           Variant="@(ViewerAccepted ? Variant.Outlined : Variant.Filled)"
+                                           Color="@(ViewerAccepted ? Color.Default : Color.Error)" aria-label="Recusar"
+                                           OnClick="HandleDeclineAsync" />
+                        </MudTooltip>
+                        <MudTooltip Text="@(CanViewerAccept ? "Aceitar" : "Você não possui os recursos pedidos")">
+                            <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small"
+                                           Variant="@(ViewerAccepted ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                                           Disabled="@(!ViewerAccepted && !CanViewerAccept)" aria-label="Aceitar"
+                                           OnClick="HandleAcceptAsync" />
+                        </MudTooltip>
+                    </MudStack>
+                }
             </MudStack>
         </MudStack>
     </MudPaper>
@@ -65,8 +103,32 @@
     [Parameter]
     public string? ViewerColor { get; set; }
 
+    [Parameter]
+    public int ViewerPlayerId { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<GamePlayerStateResponse> Players { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<long> OnAccept { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnDecline { get; set; }
+
+    [Parameter]
+    public EventCallback<TradeOfferExecutionSelection> OnExecute { get; set; }
+
     private string AvatarColor => PlayerColorUtils.ToHex(Offer.OffererColor);
+    private string TopAvatarColor => IsOfferer ? "#808080" : AvatarColor;
     private string ViewerAvatarColor => PlayerColorUtils.ToHex(ViewerColor);
+    private bool IsOfferer => ViewerPlayerId == Offer.OffererPlayerId;
+    private bool ViewerAccepted => Offer.AcceptedByPlayerId.GetValueOrDefault(ViewerPlayerId);
+    private GamePlayerStateResponse? ViewerPlayer => Players.FirstOrDefault(player => player.UsuarioId == ViewerPlayerId);
+    private bool CanViewerAccept => ViewerPlayer is not null
+        && Offer.AskedResources.All(resource => ViewerPlayer.Resources.GetValueOrDefault(resource.Key) >= resource.Value);
+    private IReadOnlyList<GamePlayerStateResponse> OtherPlayers => Players
+        .Where(player => player.UsuarioId != Offer.OffererPlayerId)
+        .ToList();
 
     private List<KeyValuePair<string, int>> OfferedResourceEntries => BuildResourceEntries(Offer.OfferedResources);
     private List<KeyValuePair<string, int>> AskedResourceEntries => BuildResourceEntries(Offer.AskedResources);
@@ -82,5 +144,26 @@
             })
             .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private Task HandleAcceptAsync()
+    {
+        return OnAccept.HasDelegate
+            ? OnAccept.InvokeAsync(Offer.OfferId)
+            : Task.CompletedTask;
+    }
+
+    private Task HandleDeclineAsync()
+    {
+        return OnDecline.HasDelegate
+            ? OnDecline.InvokeAsync(Offer.OfferId)
+            : Task.CompletedTask;
+    }
+
+    private Task HandleExecuteAsync(int targetPlayerId)
+    {
+        return OnExecute.HasDelegate
+            ? OnExecute.InvokeAsync(new TradeOfferExecutionSelection(Offer.OfferId, targetPlayerId))
+            : Task.CompletedTask;
     }
 }

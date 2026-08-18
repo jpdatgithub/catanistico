@@ -15,11 +15,20 @@ public sealed class CatanGameSessionState
     public bool AwaitingInitialRoadPlacement { get; set; }
     public int? PendingInitialRoadFromVertexId { get; set; }
     public bool HasRolledDiceThisTurn { get; set; }
+    public int PendingRoadBuilderRoads { get; set; }
+    public int DevelopmentCardsPlayedThisTurn { get; set; }
+    public Dictionary<string, int> DevelopmentCardsPurchasedThisTurn { get; set; } = [];
     public int? LastDice1 { get; set; }
     public int? LastDice2 { get; set; }
     public Dictionary<int, int> PendingDiscardByPlayerId { get; set; } = [];
+    public bool AwaitingRobberPlacement { get; set; }
+    public int? PendingRobberTileId { get; set; }
+    public List<int> PendingRobberVictimPlayerIds { get; set; } = [];
     public List<CatanResourceGainState> LastRollResourceGains { get; set; } = [];
     public List<CatanRollHistoryEntryState> RollHistory { get; set; } = [];
+    public List<CatanRobberTheftHistoryEntryState> RobberTheftHistory { get; set; } = [];
+    public List<CatanKnightPlayHistoryEntryState> KnightPlayHistory { get; set; } = [];
+    public List<CatanPlayerTradeHistoryEntryState> PlayerTradeHistory { get; set; } = [];
     public long NextTradeOfferId { get; set; } = 1;
     public List<CatanTradeOfferState> ActiveTradeOffers { get; set; } = [];
     public List<CatanPlayerState> Players { get; set; } = [];
@@ -62,6 +71,7 @@ public sealed class CatanTradeOfferState
     public Dictionary<string, int> AskedResources { get; set; } = [];
     public DateTime CreatedAtUtc { get; set; }
     public DateTime ExpiresAtUtc { get; set; }
+    public Dictionary<int, bool> AcceptedByPlayerId { get; set; } = [];
 }
 
 public sealed class CatanResourceGainState
@@ -81,15 +91,43 @@ public sealed class CatanRollHistoryEntryState
     public List<CatanResourceGainState> ResourceGains { get; set; } = [];
 }
 
+public sealed class CatanRobberTheftHistoryEntryState
+{
+    public DateTime OccurredAtUtc { get; set; }
+    public int ThiefPlayerId { get; set; }
+    public int VictimPlayerId { get; set; }
+    public string StolenResourceType { get; set; } = string.Empty;
+}
+
+public sealed class CatanKnightPlayHistoryEntryState
+{
+    public DateTime OccurredAtUtc { get; set; }
+    public int PlayerId { get; set; }
+}
+
+public sealed class CatanPlayerTradeHistoryEntryState
+{
+    public DateTime OccurredAtUtc { get; set; }
+    public int OffererPlayerId { get; set; }
+    public int RecipientPlayerId { get; set; }
+    public Dictionary<string, int> OfferedResources { get; set; } = [];
+    public Dictionary<string, int> AskedResources { get; set; } = [];
+}
+
 public sealed class CatanPlayerState
 {
     public int UsuarioId { get; set; }
     public string Nome { get; set; } = string.Empty;
+    public bool IsConnected { get; set; } = true;
     public string Cor { get; set; } = string.Empty;
     public int Pontos { get; set; }
     public int RemainingRoads { get; set; }
     public int RemainingSettlements { get; set; }
     public int RemainingCities { get; set; }
+    public int MaiorEstradaContinua { get; set; } = 1;
+    public int UsedKnightsCount { get; set; }
+    public bool HasLongestRoad { get; set; }
+    public bool HasLargestArmy { get; set; }
     public Dictionary<string, int> Resources { get; set; } = [];
     public Dictionary<string, int> DevelopmentCards { get; set; } = [];
 }

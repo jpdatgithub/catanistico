@@ -24,6 +24,7 @@ public sealed class LobbyPlayerState
 {
     public int UsuarioId { get; set; }
     public string Nome { get; set; } = string.Empty;
+    public bool IsConnected { get; set; } = true;
     public bool IsGuest { get; set; }
     public bool IsReady { get; set; }
     public DateTime EntrouEmUtc { get; set; }

@@ -1,5 +1,6 @@
 <div class="resource-trade-overlay">
-    <MudPaper Class="resource-trade-panel pa-3" Elevation="6">
+    <MudPaper Class="pa-3" Elevation="6"
+              Style="border:1px solid rgba(220, 38, 38, 0.20); background:linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 248, 245, 0.84) 100%); box-shadow:0 10px 24px rgba(15, 23, 42, 0.12); backdrop-filter:blur(6px); border-radius:16px;">
         <MudStack Spacing="2">
             @if (IsOpen)
             {
@@ -19,11 +20,11 @@
                         <MudStack Row="true">
                             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                    <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Style="color:green;"
-                                             Class="trade-arrow" />
+                                    <MudIcon Icon="@Icons.Material.Filled.ArrowDownward"
+                                             Style="color:green; font-size:1.2rem;" />
 
-                                    <MudAvatar Size="Size.Small" Class="trade-avatar"
-                                               Style="@($"background-color:gray; color:#fff;")">
+                                    <MudAvatar Size="Size.Small"
+                                               Style="background-color:gray; color:#fff; width:28px; height:28px;">
                                         <MudIcon Icon="@Icons.Material.Filled.Person" />
                                     </MudAvatar>
                                 </MudStack>
@@ -43,11 +44,11 @@
                             <MudStack>
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                        <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Style="color:#dc2626;"
-                                                 Class="trade-arrow" />
+                                        <MudIcon Icon="@Icons.Material.Filled.ArrowUpward"
+                                                 Style="color:#dc2626; font-size:1.2rem;" />
 
-                                        <MudAvatar Size="Size.Small" Class="trade-avatar"
-                                                   Style="@($"background-color:{AvatarColor}; color:#fff;")">
+                                        <MudAvatar Size="Size.Small"
+                                                   Style="@($"background-color:{AvatarColor}; color:#fff; width:28px; height:28px;")">
                                             <MudIcon Icon="@Icons.Material.Filled.Person" />
                                         </MudAvatar>
                                     </MudStack>

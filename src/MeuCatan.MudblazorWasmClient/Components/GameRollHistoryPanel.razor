@@ -1,0 +1,245 @@
+@using MeuCatan.MudblazorWasmClient.Components.Catan
+
+<div class="history-chat-list">
+    @foreach (var entrada in EnumerarHistoricoMaisRecentePrimeiro())
+    {
+        @if (entrada.RollHistory is not null)
+        {
+            var roll = entrada.RollHistory;
+            <div class="history-chat-line">
+                <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                           Style="@($"background-color:{GetPlayerColorHex(roll.CurrentTurnPlayerId)}; color:#fff;")">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                </MudAvatar>
+
+                <span class="history-dice-inline">
+                    <DiceFace Value="@roll.Dice1" Size="18" />
+                    <DiceFace Value="@roll.Dice2" Size="18" />
+                </span>
+
+                @if (roll.Total == 7)
+                {
+                    <span class="history-caption">• saiu 7, sem recursos</span>
+                }
+                else if (roll.ResourceGains.Count == 0)
+                {
+                    <span class="history-caption">• sem ganhos</span>
+                }
+                else
+                {
+                    <span class="history-caption">•</span>
+                    @foreach (var ganhosDoJogador in roll.ResourceGains.GroupBy(ganho => ganho.UsuarioId))
+                    {
+                        <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                                   Style="@($"background-color:{GetPlayerColorHex(ganhosDoJogador.Key)}; color:#fff;")">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                        </MudAvatar>
+
+                        <span class="history-resource-group">
+                            @foreach (var ganhosPorRecurso in ganhosDoJogador.GroupBy(ganho => ganho.ResourceType))
+                            {
+                                var quantidadeTotal = ganhosPorRecurso.Sum(ganho => ganho.Amount);
+                                var tokensEmpilhados = Math.Min(quantidadeTotal, 3);
+                                var tooltipTexto = GetResourceTooltipName(ganhosPorRecurso.Key);
+
+                                <span class="history-resource-item">
+                                    <MudTooltip Text="@tooltipTexto" Inline="true">
+                                        <span class="history-resource-stack">
+                                            @for (var i = 0; i < tokensEmpilhados; i++)
+                                            {
+                                                <span class="history-resource-stack-token"
+                                                      style="@($"z-index:{tokensEmpilhados - i}; transform: translate({i * 3}px, {-i * 2}px);")">
+                                                    <ResourceTokenIcon ResourceType="@ganhosPorRecurso.Key" ShowTooltip="false" />
+                                                </span>
+                                            }
+                                            @if (quantidadeTotal > 1)
+                                            {
+                                                <ResourceQuantityBadge Count="@quantidadeTotal" />
+                                            }
+                                        </span>
+                                    </MudTooltip>
+                                </span>
+                            }
+                        </span>
+                    }
+                }
+            </div>
+        }
+        else if (entrada.RobberTheftHistory is not null)
+        {
+            var theft = entrada.RobberTheftHistory;
+            <div class="history-chat-line">
+                <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                           Style="@($"background-color:{GetPlayerColorHex(theft.ThiefPlayerId)}; color:#fff;")">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                </MudAvatar>
+
+                <span class="history-caption">roubou</span>
+
+                <MudTooltip Text="@GetResourceTooltipName(theft.VisibleResourceType)" Inline="true">
+                    <span class="history-resource-token">
+                        <ResourceTokenIcon ResourceType="@theft.VisibleResourceType" ShowTooltip="false" />
+                    </span>
+                </MudTooltip>
+
+                <span class="history-caption">de</span>
+
+                <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                           Style="@($"background-color:{GetPlayerColorHex(theft.VictimPlayerId)}; color:#fff;")">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                </MudAvatar>
+            </div>
+        }
+        else if (entrada.KnightPlayHistory is not null)
+        {
+            var knightPlay = entrada.KnightPlayHistory;
+            <div class="history-chat-line">
+                <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                           Style="@($"background-color:{GetPlayerColorHex(knightPlay.PlayerId)}; color:#fff;")">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                </MudAvatar>
+
+                <span class="history-caption">@($"{GetPlayerName(knightPlay.PlayerId)} usou o cavaleiro!")</span>
+            </div>
+        }
+        else if (entrada.PlayerTradeHistory is not null)
+        {
+            var trade = entrada.PlayerTradeHistory;
+            <div class="history-chat-line">
+                <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                           Style="@($"background-color:{GetPlayerColorHex(trade.OffererPlayerId)}; color:#fff;")">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                </MudAvatar>
+                <span class="history-caption">trocou</span>
+                <span class="history-resource-group">
+                    @foreach (var resource in trade.OfferedResources)
+                    {
+                        var tokensEmpilhados = Math.Min(resource.Value, 3);
+                        <span class="history-resource-item">
+                            <MudTooltip Text="@GetResourceTooltipName(resource.Key)" Inline="true">
+                                <span class="history-resource-stack">
+                                    @for (var index = 0; index < tokensEmpilhados; index++)
+                                    {
+                                        <span class="history-resource-stack-token"
+                                              style="@($"z-index:{tokensEmpilhados - index}; transform: translate({index * 3}px, {-index * 2}px);")">
+                                            <ResourceTokenIcon ResourceType="@resource.Key" ShowTooltip="false" />
+                                        </span>
+                                    }
+                                    @if (resource.Value > 1)
+                                    {
+                                        <ResourceQuantityBadge Count="@resource.Value" />
+                                    }
+                                </span>
+                            </MudTooltip>
+                        </span>
+                    }
+                </span>
+                <span class="history-caption">por</span>
+                <span class="history-resource-group">
+                    @foreach (var resource in trade.AskedResources)
+                    {
+                        var tokensEmpilhados = Math.Min(resource.Value, 3);
+                        <span class="history-resource-item">
+                            <MudTooltip Text="@GetResourceTooltipName(resource.Key)" Inline="true">
+                                <span class="history-resource-stack">
+                                    @for (var index = 0; index < tokensEmpilhados; index++)
+                                    {
+                                        <span class="history-resource-stack-token"
+                                              style="@($"z-index:{tokensEmpilhados - index}; transform: translate({index * 3}px, {-index * 2}px);")">
+                                            <ResourceTokenIcon ResourceType="@resource.Key" ShowTooltip="false" />
+                                        </span>
+                                    }
+                                    @if (resource.Value > 1)
+                                    {
+                                        <ResourceQuantityBadge Count="@resource.Value" />
+                                    }
+                                </span>
+                            </MudTooltip>
+                        </span>
+                    }
+                </span>
+                <span class="history-caption">com</span>
+                <MudAvatar Size="Size.Small" Class="history-player-avatar"
+                           Style="@($"background-color:{GetPlayerColorHex(trade.RecipientPlayerId)}; color:#fff;")">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                </MudAvatar>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<GamePlayerStateResponse> Players { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<RollHistoryEntryResponse>? RollHistory { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<RobberTheftHistoryEntryResponse>? RobberTheftHistory { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<KnightPlayHistoryEntryResponse>? KnightPlayHistory { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<PlayerTradeHistoryEntryResponse>? PlayerTradeHistory { get; set; }
+
+    private IEnumerable<HistoryFeedEntry> EnumerarHistoricoMaisRecentePrimeiro()
+    {
+        var rolls = (RollHistory ?? [])
+            .Select(roll => new HistoryFeedEntry(roll.RolledAtUtc, roll, null));
+
+        var thefts = (RobberTheftHistory ?? [])
+            .Select(theft => new HistoryFeedEntry(theft.OccurredAtUtc, null, theft));
+
+        var knightPlays = (KnightPlayHistory ?? [])
+            .Select(knightPlay => new HistoryFeedEntry(knightPlay.OccurredAtUtc, null, null, knightPlay));
+
+        var playerTrades = (PlayerTradeHistory ?? [])
+            .Select(trade => new HistoryFeedEntry(trade.OccurredAtUtc, null, null, null, trade));
+
+        return rolls
+            .Concat(thefts)
+            .Concat(knightPlays)
+            .Concat(playerTrades)
+            .OrderByDescending(entry => entry.TimestampUtc);
+    }
+
+    private string GetPlayerName(int playerId)
+    {
+        return Players.FirstOrDefault(player => player.UsuarioId == playerId)?.Nome ?? "Jogador";
+    }
+
+    private string GetPlayerColorHex(int playerId)
+    {
+        var color = Players.FirstOrDefault(player => player.UsuarioId == playerId)?.Cor ?? string.Empty;
+        return PlayerColorUtils.ToHex(color);
+    }
+
+    private static string GetResourceTooltipName(string resourceType)
+    {
+        return resourceType.ToLowerInvariant() switch
+        {
+            "coringa" => "Algum recurso",
+            "madeira" => "Madeira",
+            "argila" => "Argila",
+            "ovelha" => "Ovelha",
+            "trigo" => "Trigo",
+            "pedra" => "Pedra",
+            "desenvolvimento" => "Carta de desenvolvimento",
+            "cavaleiro" => "Cavaleiro",
+            "ponto-de-vitoria" => "Ponto de vitoria",
+            "roadbuilder" => "Construtor de estradas",
+            "plus2resources" => "Mais 2 recursos",
+            "monopoly" => "Monopolio",
+            _ => resourceType
+        };
+    }
+
+    private sealed record HistoryFeedEntry(
+        DateTime TimestampUtc,
+        RollHistoryEntryResponse? RollHistory,
+        RobberTheftHistoryEntryResponse? RobberTheftHistory,
+        KnightPlayHistoryEntryResponse? KnightPlayHistory = null,
+        PlayerTradeHistoryEntryResponse? PlayerTradeHistory = null);
+}

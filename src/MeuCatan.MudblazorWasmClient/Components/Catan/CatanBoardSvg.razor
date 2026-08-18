@@ -11,7 +11,8 @@ else
     var model = CatanBoardLayoutBuilder.Build(State);
     var transform = $"translate({F(_tx)},{F(_ty)}) scale({F(_scale)})";
 
-    <div @ref="_containerRef" style="width:100%; height:@(ContainerHeight); overflow:hidden; user-select:none;"
+    <div @ref="_containerRef"
+         style="width:100%; height:@(ContainerHeight); flex:@(FillParent ? "1 1 auto" : "0 0 auto"); min-height:0; overflow:hidden; user-select:none;"
          @onmousemove="OnMouseMove" @onmouseup="OnMouseUp" @onmouseleave="OnMouseUp">
         <svg width="100%" height="100%" class="catan-board-svg" role="img" aria-label="Tabuleiro do Catan"
              style="display:block;" @onwheel="OnWheel" @onwheel:preventDefault @onmousedown="OnMouseDown">
@@ -53,9 +54,19 @@ else
             <g transform="@transform">
                 @foreach (var tile in model.Tiles)
                 {
+                    var isTileHighlighted = ShouldHighlightTile(tile);
+
                     <polygon points="@tile.Points" fill="url(#@GetPatternName(tile.ResourceType))" fill-opacity="0.97"
                              stroke="#5b4a3f" stroke-width="1.8" filter="url(#tileShadow)" />
                     <polygon points="@tile.Points" fill="url(#tileDefaultGradient)" stroke="none" pointer-events="none" />
+
+                    if (isTileHighlighted)
+                    {
+                        <polygon points="@tile.Points" fill="#111827" fill-opacity="0.08" stroke="#111827" stroke-opacity="0.55"
+                                 stroke-width="4" class="tile-action" style="cursor:pointer;" pointer-events="all"
+                                 @onclick="() => HandleTileClick(tile.TileId)" @onclick:stopPropagation="true"
+                                 @onmousedown:stopPropagation="true" />
+                    }
 
                     if (tile.NumberToken != 7)
                     {
@@ -63,19 +74,57 @@ else
                         var pipCount = GetTokenPipCount(tile.NumberToken);
                         var pipColor = tile.NumberToken is 6 or 8 ? "#dc2626" : "#7c5f3f";
 
-                        <circle cx="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
-                                cy="@tokenY.ToString(CultureInfo.InvariantCulture)" r="25" fill="url(#tokenGradient)" stroke="#7c5f3f"
-                                stroke-width="2" filter="url(#tokenShadow)" />
-                        <svg:text x="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
-                                  y="@tokenY.ToString(CultureInfo.InvariantCulture)" text-anchor="middle" font-size="19" font-weight="700"
-                                  fill="#2f2419" dominant-baseline="middle">
-                            @tile.NumberToken
-                        </svg:text>
-
-                        for (var i = 0; i < pipCount; i++)
+                        if (isTileHighlighted)
                         {
-                            <circle cx="@F(tile.CenterX + GetPipOffsetX(i, pipCount))" cy="@F(tokenY + 12)" r="2.3" fill="@pipColor" />
+                            <g class="tile-action" style="cursor:pointer;" pointer-events="all"
+                               @onclick="() => HandleTileClick(tile.TileId)" @onclick:stopPropagation="true"
+                               @onmousedown:stopPropagation="true">
+                                <circle cx="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
+                                        cy="@tokenY.ToString(CultureInfo.InvariantCulture)" r="25" fill="url(#tokenGradient)"
+                                        stroke="#7c5f3f" stroke-width="2" filter="url(#tokenShadow)" />
+                                <svg:text x="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
+                                          y="@tokenY.ToString(CultureInfo.InvariantCulture)" text-anchor="middle" font-size="19"
+                                          font-weight="700" fill="#2f2419" dominant-baseline="middle">
+                                    @tile.NumberToken
+                                </svg:text>
+
+                                @for (var i = 0; i < pipCount; i++)
+                                {
+                                    <circle cx="@F(tile.CenterX + GetPipOffsetX(i, pipCount))" cy="@F(tokenY + 12)" r="2.3"
+                                            fill="@pipColor" />
+                                }
+                            </g>
                         }
+                        else
+                        {
+                            <circle cx="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
+                                    cy="@tokenY.ToString(CultureInfo.InvariantCulture)" r="25" fill="url(#tokenGradient)" stroke="#7c5f3f"
+                                    stroke-width="2" filter="url(#tokenShadow)" />
+                            <svg:text x="@tile.CenterX.ToString(CultureInfo.InvariantCulture)"
+                                      y="@tokenY.ToString(CultureInfo.InvariantCulture)" text-anchor="middle" font-size="19" font-weight="700"
+                                      fill="#2f2419" dominant-baseline="middle">
+                                @tile.NumberToken
+                            </svg:text>
+
+                            for (var i = 0; i < pipCount; i++)
+                            {
+                                <circle cx="@F(tile.CenterX + GetPipOffsetX(i, pipCount))" cy="@F(tokenY + 12)" r="2.3" fill="@pipColor" />
+                            }
+                        }
+                    }
+
+                    if (State?.RobberTileId == tile.TileId)
+                    {
+                        var robberCenterY = tile.CenterY - 22;
+
+                        <g pointer-events="none">
+                            <image href="images/resources/ladrao.svg"
+                                   x="@F(tile.CenterX - 24)"
+                                   y="@F(robberCenterY - 24)"
+                                   width="48"
+                                   height="48"
+                                   preserveAspectRatio="xMidYMid meet" />
+                        </g>
                     }
                 }
 
@@ -150,8 +199,10 @@ else
     [Parameter] public bool FillParent { get; set; }
     [Parameter] public EventCallback<int> OnVertexClicked { get; set; }
     [Parameter] public EventCallback<EdgeKey> OnEdgeClicked { get; set; }
+    [Parameter] public EventCallback<int> OnTileClicked { get; set; }
     [Parameter] public IReadOnlySet<int>? HighlightedVertexIds { get; set; }
     [Parameter] public IReadOnlySet<EdgeKey>? HighlightedEdgeKeys { get; set; }
+    [Parameter] public IReadOnlySet<int>? HighlightedTileIds { get; set; }
 
     // Transform state: translate(_tx, _ty) scale(_scale)
     private double _tx;
@@ -264,9 +315,17 @@ else
     private bool ShouldHighlightEdge(CatanSvgEdge edge)
         => HighlightedEdgeKeys?.Contains(new EdgeKey(edge.smallerVertexId, edge.biggerVertexId)) == true;
 
+    private bool ShouldHighlightTile(CatanSvgTile tile)
+        => HighlightedTileIds?.Contains(tile.TileId) == true;
+
     private Task HandleEdgeClick(CatanSvgEdge edge)
     {
         return OnEdgeClicked.InvokeAsync(new EdgeKey(edge.smallerVertexId, edge.biggerVertexId));
+    }
+
+    private Task HandleTileClick(int tileId)
+    {
+        return OnTileClicked.InvokeAsync(tileId);
     }
 
     // Ensures at least `margin` px of canvas remains visible on each side

@@ -1,6 +1,7 @@
 .development-card-panel {
     display: flex;
     align-items: flex-end;
+    justify-content: flex-end;
     min-height: 94px;
     box-sizing: border-box;
 }
@@ -8,6 +9,7 @@
 .development-card-list {
     display: flex;
     align-items: center;
+    flex-direction: row-reverse;
     gap: 12px;
     overflow-x: auto;
     min-height: 94px;

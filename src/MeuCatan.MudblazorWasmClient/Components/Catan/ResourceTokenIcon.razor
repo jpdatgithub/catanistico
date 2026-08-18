@@ -1,8 +1,23 @@
-<img class="resource-token-icon" src="@IconPath" alt="@AccessibleLabel" draggable="false" />
+@if (ShowTooltip)
+{
+    <MudTooltip Text="@TooltipName" Inline="true">
+        <img class="resource-token-icon" src="@IconPath" alt="@AccessibleLabel" style="@Style" draggable="false" />
+    </MudTooltip>
+}
+else
+{
+    <img class="resource-token-icon" src="@IconPath" alt="@AccessibleLabel" style="@Style" draggable="false" />
+}
 
 @code {
     [Parameter, EditorRequired]
     public string ResourceType { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Style { get; set; }
+
+    [Parameter]
+    public bool ShowTooltip { get; set; } = true;
 
     private string IconPath => ResourceType.ToLowerInvariant() switch
     {
@@ -11,6 +26,7 @@
         "ovelha" => "images/resources/ovelha.svg",
         "trigo" => "images/resources/trigo.svg",
         "pedra" => "images/resources/pedra.svg",
+        "coringa" => "images/resources/coringa.svg",
         "desenvolvimento" => "images/resources/desenvolvimento.svg",
         "cavaleiro" => "images/resources/cavaleiro.svg",
         "ponto-de-vitoria" => "images/resources/victorypoint.svg",
@@ -27,6 +43,7 @@
         "ovelha" => "Ovelha",
         "trigo" => "Trigo",
         "pedra" => "Pedra",
+        "coringa" => "Coringa",
         "desenvolvimento" => "Carta de desenvolvimento",
         "cavaleiro" => "Cavaleiro",
         "ponto-de-vitoria" => "Ponto de vitoria",
@@ -34,5 +51,11 @@
         "plus2resources" => "Mais 2 recursos",
         "monopoly" => "Monopolio",
         _ => ResourceType
+    };
+
+    private string TooltipName => ResourceType.ToLowerInvariant() switch
+    {
+        "coringa" => "Algum recurso",
+        _ => AccessibleLabel
     };
 }

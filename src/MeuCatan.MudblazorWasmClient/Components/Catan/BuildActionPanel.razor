@@ -37,7 +37,7 @@
         <ChildContent>
             <span class="build-action-tooltip-anchor">
                 <button type="button" class="build-action-button @(ActiveBuildMode == GameActionTypes.BuildCity ? "build-action-button--active" : "")" disabled="@IsCityDisabled" @onclick="HandleCityClick"
-                        title="Cidade" aria-label="Construir cidade">
+                        aria-label="Construir cidade">
                     <svg class="build-marker-preview" viewBox="0 -24 48 56" role="img" aria-label="Cidade">
                         <CityMarker X="24" Y="25" Color="@PlayerColor" />
                     </svg>
@@ -54,7 +54,7 @@
         <ChildContent>
             <span class="build-action-tooltip-anchor">
                 <button type="button" class="build-action-button @(ActiveBuildMode == GameActionTypes.BuildVillage ? "build-action-button--active" : "")" disabled="@IsVillageDisabled"
-                        @onclick="HandleVillageClick" title="Vilarejo" aria-label="Construir vilarejo">
+                        @onclick="HandleVillageClick" aria-label="Construir vilarejo">
                     <svg class="build-marker-preview" viewBox="0 -14 48 46" role="img" aria-label="Vilarejo">
                         <VillageMarker X="24" Y="24" RoofColor="@PlayerColor" BodyColor="@PlayerColor" />
                     </svg>
@@ -164,7 +164,7 @@
         {
             <span class="build-cost-item" style="display:inline-flex; align-items:center; gap:2px;">
                 <span style="display:inline-flex; width:18px; height:18px;">
-                    <ResourceTokenIcon ResourceType="@item.ResourceType" />
+                    <ResourceTokenIcon ResourceType="@item.ResourceType" ShowTooltip="false" />
                 </span>
                 <span class="build-cost-qty" style="line-height:1;">@item.Amount</span>
             </span>

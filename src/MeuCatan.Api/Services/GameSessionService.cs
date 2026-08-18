@@ -9,6 +9,9 @@ public interface IGameSessionService
     LobbyOperationResult<GameSessionResponse> CreateGameSessionFromRoom(RoomGameStartContext roomContext);
     LobbyOperationResult<GameSessionResponse> GetSession(int salaId, int usuarioId);
     LobbyOperationResult<GameSessionResponse> ExecuteAction(int salaId, int usuarioId, GameActionRequest request);
+    void SetPlayerConnection(int salaId, int usuarioId, bool isConnected);
+    void RemovePlayerFromSession(int salaId, int usuarioId);
+    void DeleteSession(int salaId);
 }
 
 public sealed class CatanGameSessionService : IGameSessionService
@@ -113,11 +116,14 @@ public sealed class CatanGameSessionService : IGameSessionService
                     {
                         UsuarioId = player.UsuarioId,
                         Nome = player.Nome,
+                        IsConnected = true,
                         Cor = PlayerColors[index % PlayerColors.Length],
                         Pontos = 0,
                         RemainingRoads = 15,
                         RemainingSettlements = 5,
                         RemainingCities = 4,
+                        MaiorEstradaContinua = 1,
+                        UsedKnightsCount = 0,
                         Resources = new Dictionary<string, int>(),
                         DevelopmentCards = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
                     })
@@ -148,6 +154,12 @@ public sealed class CatanGameSessionService : IGameSessionService
             if (session.Players.All(player => player.UsuarioId != usuarioId))
             {
                 return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não participa desta sessão.");
+            }
+
+            var player = session.Players.First(player => player.UsuarioId == usuarioId);
+            if (!player.IsConnected)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Forbidden("Você está desconectado desta partida. Retorne à sala para reconectar.");
             }
 
             EnsureBankInitialized(session);
@@ -182,21 +194,41 @@ public sealed class CatanGameSessionService : IGameSessionService
                 return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não participa desta sessão.");
             }
 
+            if (!actingPlayer.IsConnected)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Forbidden("Você está desconectado desta partida. Retorne à sala para reconectar.");
+            }
+
             EnsureBankInitialized(session);
             EnsurePendingDiscardStateInitialized(session);
 
             RemoveExpiredTradeOffers(session, DateTime.UtcNow);
 
             var isDiscardAction = string.Equals(request.ActionType, GameActionTypes.DiscardResources, StringComparison.OrdinalIgnoreCase);
+            var isMoveRobberAction = string.Equals(request.ActionType, GameActionTypes.MoveRobber, StringComparison.OrdinalIgnoreCase);
+            var isChooseRobberVictimAction = string.Equals(request.ActionType, GameActionTypes.ChooseRobberVictim, StringComparison.OrdinalIgnoreCase);
+            var isAcceptTradeAction = string.Equals(request.ActionType, GameActionTypes.AcceptTrade, StringComparison.OrdinalIgnoreCase);
+            var isDeclineTradeAction = string.Equals(request.ActionType, GameActionTypes.DeclineTrade, StringComparison.OrdinalIgnoreCase);
 
             if (!isDiscardAction && HasAnyPendingDiscards(session))
             {
                 return LobbyOperationResult<GameSessionResponse>.Validation("Existe descarte pendente após o resultado 7. Conclua os descartes para continuar o turno.");
             }
 
-            if (session.CurrentPlayerId != usuarioId && !isDiscardAction)
+            if (!isDiscardAction && !isMoveRobberAction && !isChooseRobberVictimAction && IsRobberResolutionPending(session))
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("A resolução do ladrão ainda não foi concluída.");
+            }
+
+            if (session.CurrentPlayerId != usuarioId && !isDiscardAction && !isAcceptTradeAction && !isDeclineTradeAction)
             {
                 return LobbyOperationResult<GameSessionResponse>.Forbidden("Você não pode agir agora.");
+            }
+
+            if (session.PendingRoadBuilderRoads > 0
+                && !string.Equals(request.ActionType, GameActionTypes.BuildRoad, StringComparison.OrdinalIgnoreCase))
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("Conclua a construção das estradas gratuitas antes de realizar outra ação.");
             }
 
             if (string.Equals(request.ActionType, GameActionTypes.PlaceInitialSettlement, StringComparison.OrdinalIgnoreCase))
@@ -264,6 +296,35 @@ public sealed class CatanGameSessionService : IGameSessionService
                     return offerTradeResult;
                 }
             }
+            else if (isAcceptTradeAction)
+            {
+                var acceptTradeResult = TrySetTradeOfferAcceptance(session, actingPlayer, request.OfferId, true);
+                if (acceptTradeResult is not null)
+                {
+                    return acceptTradeResult;
+                }
+            }
+            else if (isDeclineTradeAction)
+            {
+                var declineTradeResult = TrySetTradeOfferAcceptance(session, actingPlayer, request.OfferId, false);
+                if (declineTradeResult is not null)
+                {
+                    return declineTradeResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.ExecuteTrade, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno || !session.HasRolledDiceThisTurn)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode concluir trocas após rolar os dados.");
+                }
+
+                var executeTradeResult = TryExecuteTrade(session, actingPlayer, request.OfferId, request.TargetPlayerId);
+                if (executeTradeResult is not null)
+                {
+                    return executeTradeResult;
+                }
+            }
             else if (string.Equals(request.ActionType, GameActionTypes.TradeWithBank, StringComparison.OrdinalIgnoreCase))
             {
                 if (session.Phase != GameTipoFase.Turno || !session.HasRolledDiceThisTurn)
@@ -290,9 +351,62 @@ public sealed class CatanGameSessionService : IGameSessionService
                     return buyDevelopmentCardResult;
                 }
             }
+            else if (string.Equals(request.ActionType, GameActionTypes.PlayKnight, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("A fase atual não permite jogar carta de desenvolvimento.");
+                }
+
+                var playKnightResult = TryPlayKnight(session, actingPlayer);
+                if (playKnightResult is not null)
+                {
+                    return playKnightResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.PlayRoadBuilder, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("A fase atual não permite jogar carta de desenvolvimento.");
+                }
+
+                var playRoadBuilderResult = TryPlayRoadBuilder(session, actingPlayer);
+                if (playRoadBuilderResult is not null)
+                {
+                    return playRoadBuilderResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.PlayPlus2Resources, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("A fase atual não permite jogar carta de desenvolvimento.");
+                }
+
+                var playPlus2ResourcesResult = TryPlayPlus2Resources(session, actingPlayer, request.SelectedResources);
+                if (playPlus2ResourcesResult is not null)
+                {
+                    return playPlus2ResourcesResult;
+                }
+            }
+            else if (string.Equals(request.ActionType, GameActionTypes.PlayMonopoly, StringComparison.OrdinalIgnoreCase))
+            {
+                if (session.Phase != GameTipoFase.Turno)
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("A fase atual não permite jogar carta de desenvolvimento.");
+                }
+
+                var playMonopolyResult = TryPlayMonopoly(session, actingPlayer, request.SelectedResources);
+                if (playMonopolyResult is not null)
+                {
+                    return playMonopolyResult;
+                }
+            }
             else if (string.Equals(request.ActionType, GameActionTypes.BuildRoad, StringComparison.OrdinalIgnoreCase))
             {
-                if (session.Phase != GameTipoFase.Turno || !session.HasRolledDiceThisTurn)
+                if (session.Phase != GameTipoFase.Turno
+                    || (!session.HasRolledDiceThisTurn && session.PendingRoadBuilderRoads <= 0))
                 {
                     return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode construir uma estrada após rolar os dados.");
                 }
@@ -342,6 +456,32 @@ public sealed class CatanGameSessionService : IGameSessionService
                     return discardResult;
                 }
             }
+            else if (isMoveRobberAction)
+            {
+                if (session.Phase != GameTipoFase.Turno || (!session.HasRolledDiceThisTurn && !IsRobberResolutionPending(session)))
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode mover o ladrão durante o turno quando houver uma resolução de ladrão pendente.");
+                }
+
+                var moveRobberResult = TryMoveRobber(session, actingPlayer, request.TileId);
+                if (moveRobberResult is not null)
+                {
+                    return moveRobberResult;
+                }
+            }
+            else if (isChooseRobberVictimAction)
+            {
+                if (session.Phase != GameTipoFase.Turno || (!session.HasRolledDiceThisTurn && !IsRobberResolutionPending(session)))
+                {
+                    return LobbyOperationResult<GameSessionResponse>.Validation("Você só pode concluir o roubo do ladrão durante o turno quando houver uma resolução de ladrão pendente.");
+                }
+
+                var chooseVictimResult = TryChooseRobberVictim(session, actingPlayer, request.TargetPlayerId);
+                if (chooseVictimResult is not null)
+                {
+                    return chooseVictimResult;
+                }
+            }
             else
             {
                 return LobbyOperationResult<GameSessionResponse>.Validation("Tipo de ação não suportado.");
@@ -352,6 +492,103 @@ public sealed class CatanGameSessionService : IGameSessionService
 
             return LobbyOperationResult<GameSessionResponse>.Ok(ToResponse(session, usuarioId));
         });
+    }
+
+    public void SetPlayerConnection(int salaId, int usuarioId, bool isConnected)
+    {
+        _sessionStore.Write(store =>
+        {
+            var session = store.GetSessionOrDefault(salaId);
+            var player = session?.Players.FirstOrDefault(item => item.UsuarioId == usuarioId);
+            if (session is null || player is null || player.IsConnected == isConnected)
+            {
+                return false;
+            }
+
+            player.IsConnected = isConnected;
+
+            if (!isConnected)
+            {
+                session.PendingDiscardByPlayerId.Remove(usuarioId);
+                session.PendingRobberVictimPlayerIds.Remove(usuarioId);
+                session.ActiveTradeOffers.RemoveAll(offer => offer.OffererPlayerId == usuarioId);
+
+                if (session.Phase == GameTipoFase.Turno && session.CurrentPlayerId == usuarioId)
+                {
+                    AdvanceToNextConnectedPlayer(session);
+                    session.HasRolledDiceThisTurn = false;
+                }
+            }
+            else if (session.Phase == GameTipoFase.Turno && session.Players.All(item => !item.IsConnected || item.UsuarioId == usuarioId))
+            {
+                session.CurrentPlayerId = usuarioId;
+                session.HasRolledDiceThisTurn = false;
+            }
+
+            store.Save(session);
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, isConnected ? "player-reconnected" : "player-disconnected");
+            return true;
+        });
+    }
+
+    public void RemovePlayerFromSession(int salaId, int usuarioId)
+    {
+        _sessionStore.Write(store =>
+        {
+            var session = store.GetSessionOrDefault(salaId);
+            if (session is null)
+            {
+                return false;
+            }
+
+            var wasCurrentPlayer = session.CurrentPlayerId == usuarioId;
+            var removedPlayerCount = session.Players.RemoveAll(player => player.UsuarioId == usuarioId);
+            if (removedPlayerCount == 0)
+            {
+                return false;
+            }
+
+            foreach (var vertex in session.Board.Vertices.Where(vertex => vertex.OwnerPlayerId == usuarioId))
+            {
+                vertex.OwnerPlayerId = null;
+                vertex.BuildingType = null;
+            }
+
+            foreach (var edge in session.Board.Edges.Where(edge => edge.OwnerPlayerId == usuarioId))
+            {
+                edge.OwnerPlayerId = null;
+            }
+
+            session.SetupTurnOrder.RemoveAll(playerId => playerId == usuarioId);
+            session.PendingDiscardByPlayerId.Remove(usuarioId);
+            session.PendingRobberVictimPlayerIds.RemoveAll(playerId => playerId == usuarioId);
+            session.ActiveTradeOffers.RemoveAll(offer => offer.OffererPlayerId == usuarioId);
+
+            if (session.Players.Count == 0)
+            {
+                store.Remove(salaId);
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "session-removed");
+                return true;
+            }
+
+            if (wasCurrentPlayer || session.Players.All(player => player.UsuarioId != session.CurrentPlayerId))
+            {
+                session.CurrentPlayerId = session.Players.FirstOrDefault(player => player.IsConnected)?.UsuarioId
+                    ?? session.Players[0].UsuarioId;
+                session.HasRolledDiceThisTurn = false;
+                ResetRobberResolution(session);
+            }
+
+            store.Save(session);
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "player-removed");
+            return true;
+        });
+    }
+
+    public void DeleteSession(int salaId)
+    {
+        _sessionStore.Write(store => store.Remove(salaId));
+        _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "session-removed");
     }
 
     private static LobbyOperationResult<GameSessionResponse>? TryPlaceInitialSettlement(
@@ -457,6 +694,7 @@ public sealed class CatanGameSessionService : IGameSessionService
 
         edge.OwnerPlayerId = usuarioId;
         actingPlayer.RemainingRoads = Math.Max(0, actingPlayer.RemainingRoads - 1);
+        UpdatePlayerLongestRoad(session, actingPlayer);
 
         session.AwaitingInitialRoadPlacement = false;
         session.PendingInitialRoadFromVertexId = null;
@@ -499,12 +737,17 @@ public sealed class CatanGameSessionService : IGameSessionService
         session.HasRolledDiceThisTurn = true;
         session.LastRollResourceGains = [];
         session.PendingDiscardByPlayerId.Clear();
+        ResetRobberResolution(session);
 
         var rolledTotal = dice1 + dice2;
         if (rolledTotal == 7)
         {
             session.ActiveTradeOffers.Clear();
             InitializePendingDiscardsForRobberRoll(session);
+            if (!HasAnyPendingDiscards(session))
+            {
+                session.AwaitingRobberPlacement = true;
+            }
         }
         else
         {
@@ -540,6 +783,11 @@ public sealed class CatanGameSessionService : IGameSessionService
 
     private static LobbyOperationResult<GameSessionResponse>? TryEndTurn(CatanGameSessionState session)
     {
+        if (session.PendingRoadBuilderRoads > 0)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Conclua a construção das estradas gratuitas antes de passar o turno.");
+        }
+
         if (!session.HasRolledDiceThisTurn)
         {
             return LobbyOperationResult<GameSessionResponse>.Validation("Você precisa rolar os dados antes de passar o turno.");
@@ -550,12 +798,32 @@ public sealed class CatanGameSessionService : IGameSessionService
             return LobbyOperationResult<GameSessionResponse>.Validation("Ainda existem descartes pendentes após o resultado 7.");
         }
 
-        var currentIndex = session.Players.FindIndex(player => player.UsuarioId == session.CurrentPlayerId);
-        var nextIndex = (currentIndex + 1) % session.Players.Count;
-        session.CurrentPlayerId = session.Players[nextIndex].UsuarioId;
+        if (IsRobberResolutionPending(session))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("A resolução do ladrão ainda não foi concluída.");
+        }
+
+        AdvanceToNextConnectedPlayer(session);
         session.HasRolledDiceThisTurn = false;
+        session.DevelopmentCardsPlayedThisTurn = 0;
+        session.DevelopmentCardsPurchasedThisTurn = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        ResetRobberResolution(session);
 
         return null;
+    }
+
+    private static void AdvanceToNextConnectedPlayer(CatanGameSessionState session)
+    {
+        var currentIndex = session.Players.FindIndex(player => player.UsuarioId == session.CurrentPlayerId);
+        for (var offset = 1; offset <= session.Players.Count; offset++)
+        {
+            var nextPlayer = session.Players[(Math.Max(currentIndex, 0) + offset) % session.Players.Count];
+            if (nextPlayer.IsConnected)
+            {
+                session.CurrentPlayerId = nextPlayer.UsuarioId;
+                return;
+            }
+        }
     }
 
     private static LobbyOperationResult<GameSessionResponse>? TryBuyDevelopmentCard(
@@ -588,7 +856,262 @@ public sealed class CatanGameSessionService : IGameSessionService
         actingPlayer.DevelopmentCards.TryGetValue(developmentCardType, out var ownedCount);
         actingPlayer.DevelopmentCards[developmentCardType] = ownedCount + 1;
 
+        session.DevelopmentCardsPurchasedThisTurn ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        session.DevelopmentCardsPurchasedThisTurn.TryGetValue(developmentCardType, out var purchasedCount);
+        session.DevelopmentCardsPurchasedThisTurn[developmentCardType] = purchasedCount + 1;
+
+        if (string.Equals(developmentCardType, DevelopmentCardTypes.VictoryPoint, StringComparison.OrdinalIgnoreCase))
+        {
+            actingPlayer.Pontos += 1;
+        }
+
         return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryPlayKnight(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer)
+    {
+        if (!PodeJogarDesenvolvimento(session, actingPlayer, DevelopmentCardTypes.Knight))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não pode jogar Cavaleiro agora.");
+        }
+
+        if (!TryConsumeDevelopmentCard(actingPlayer, DevelopmentCardTypes.Knight))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui carta de Cavaleiro disponível.");
+        }
+
+        session.DevelopmentCardsPlayedThisTurn += 1;
+        actingPlayer.UsedKnightsCount = Math.Max(0, actingPlayer.UsedKnightsCount) + 1;
+        UpdateLargestArmy(session, actingPlayer.UsuarioId);
+
+        session.KnightPlayHistory.Add(new CatanKnightPlayHistoryEntryState
+        {
+            OccurredAtUtc = DateTime.UtcNow,
+            PlayerId = actingPlayer.UsuarioId
+        });
+
+        if (session.KnightPlayHistory.Count > 20)
+        {
+            session.KnightPlayHistory.RemoveAt(0);
+        }
+
+        ResetRobberResolution(session);
+        session.AwaitingRobberPlacement = true;
+        session.PendingRobberTileId = null;
+        session.PendingRobberVictimPlayerIds.Clear();
+
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryPlayRoadBuilder(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer)
+    {
+        if (!PodeJogarDesenvolvimento(session, actingPlayer, DevelopmentCardTypes.RoadBuilder))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não pode jogar Construtor de Estradas agora.");
+        }
+
+        if (actingPlayer.RemainingRoads <= 0)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui peças de estrada disponíveis.");
+        }
+
+        if (!HasAvailableRoadPlacement(session.Board, actingPlayer.UsuarioId))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui uma aresta válida para construir estrada.");
+        }
+
+        if (!TryConsumeDevelopmentCard(actingPlayer, DevelopmentCardTypes.RoadBuilder))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui carta Construtor de Estradas disponível.");
+        }
+
+        session.DevelopmentCardsPlayedThisTurn += 1;
+        session.PendingRoadBuilderRoads = Math.Min(2, actingPlayer.RemainingRoads);
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryPlayPlus2Resources(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        IReadOnlyDictionary<string, int>? selectedResources)
+    {
+        if (!PodeJogarDesenvolvimento(session, actingPlayer, DevelopmentCardTypes.Plus2Resources))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não pode jogar Mais 2 Recursos agora.");
+        }
+
+        var normalizedSelection = NormalizeTradeResources(selectedResources);
+        if (normalizedSelection.Values.Sum() != 2
+            || normalizedSelection.Keys.Any(resource => !TradableResources.Contains(resource, StringComparer.OrdinalIgnoreCase)))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Selecione exatamente dois recursos válidos.");
+        }
+
+        foreach (var selectedResource in normalizedSelection)
+        {
+            if (session.Bank.ResourceCounts.GetValueOrDefault(selectedResource.Key) < selectedResource.Value)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("O banco não possui os recursos selecionados.");
+            }
+        }
+
+        if (!TryConsumeDevelopmentCard(actingPlayer, DevelopmentCardTypes.Plus2Resources))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui carta Mais 2 Recursos disponível.");
+        }
+
+        session.DevelopmentCardsPlayedThisTurn += 1;
+        foreach (var selectedResource in normalizedSelection)
+        {
+            TryWithdrawFromBank(session, selectedResource.Key, selectedResource.Value);
+            actingPlayer.Resources[selectedResource.Key] = actingPlayer.Resources.GetValueOrDefault(selectedResource.Key)
+                + selectedResource.Value;
+        }
+
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryPlayMonopoly(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        IReadOnlyDictionary<string, int>? selectedResources)
+    {
+        if (!PodeJogarDesenvolvimento(session, actingPlayer, DevelopmentCardTypes.Monopoly))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não pode jogar Monopólio agora.");
+        }
+
+        var normalizedSelection = NormalizeTradeResources(selectedResources);
+        if (normalizedSelection.Count != 1
+            || normalizedSelection.Values.Single() != 1
+            || !TradableResources.Contains(normalizedSelection.Keys.Single(), StringComparer.OrdinalIgnoreCase))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Selecione exatamente um recurso válido.");
+        }
+
+        if (!TryConsumeDevelopmentCard(actingPlayer, DevelopmentCardTypes.Monopoly))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui carta Monopólio disponível.");
+        }
+
+        session.DevelopmentCardsPlayedThisTurn += 1;
+        var selectedResource = normalizedSelection.Keys.Single();
+        var collectedAmount = 0;
+
+        foreach (var player in session.Players.Where(player => player.UsuarioId != actingPlayer.UsuarioId))
+        {
+            var playerAmount = player.Resources.GetValueOrDefault(selectedResource);
+            if (playerAmount <= 0)
+            {
+                continue;
+            }
+
+            player.Resources[selectedResource] = 0;
+            collectedAmount += playerAmount;
+        }
+
+        actingPlayer.Resources[selectedResource] = actingPlayer.Resources.GetValueOrDefault(selectedResource) + collectedAmount;
+        return null;
+    }
+
+    private static bool PodeJogarDesenvolvimento(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer)
+    {
+        if (session.Phase != GameTipoFase.Turno)
+        {
+            return false;
+        }
+
+        if (session.CurrentPlayerId != actingPlayer.UsuarioId)
+        {
+            return false;
+        }
+
+        if (HasAnyPendingDiscards(session))
+        {
+            return false;
+        }
+
+        if (IsRobberResolutionPending(session))
+        {
+            return false;
+        }
+
+        if (session.PendingRoadBuilderRoads > 0)
+        {
+            return false;
+        }
+
+        if (session.DevelopmentCardsPlayedThisTurn >= 1)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool PodeJogarDesenvolvimento(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        string developmentCardType)
+    {
+        if (!PodeJogarDesenvolvimento(session, actingPlayer))
+        {
+            return false;
+        }
+
+        var ownedCount = GetDevelopmentCardCount(actingPlayer, developmentCardType);
+        var purchasedThisTurnCount = GetDevelopmentCardPurchasedThisTurnCount(session, developmentCardType);
+        return ownedCount > purchasedThisTurnCount;
+    }
+
+    private static int GetDevelopmentCardPurchasedThisTurnCount(
+        CatanGameSessionState session,
+        string developmentCardType)
+    {
+        if (string.IsNullOrWhiteSpace(developmentCardType))
+        {
+            return 0;
+        }
+
+        session.DevelopmentCardsPurchasedThisTurn ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        return session.DevelopmentCardsPurchasedThisTurn.GetValueOrDefault(developmentCardType);
+    }
+
+    private static int GetDevelopmentCardCount(CatanPlayerState actingPlayer, string developmentCardType)
+    {
+        if (string.IsNullOrWhiteSpace(developmentCardType))
+        {
+            return 0;
+        }
+
+        actingPlayer.DevelopmentCards ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        return actingPlayer.DevelopmentCards.GetValueOrDefault(developmentCardType);
+    }
+
+    private static bool TryConsumeDevelopmentCard(CatanPlayerState actingPlayer, string developmentCardType)
+    {
+        if (GetDevelopmentCardCount(actingPlayer, developmentCardType) <= 0)
+        {
+            return false;
+        }
+
+        var nextCount = actingPlayer.DevelopmentCards[developmentCardType] - 1;
+        if (nextCount <= 0)
+        {
+            actingPlayer.DevelopmentCards.Remove(developmentCardType);
+        }
+        else
+        {
+            actingPlayer.DevelopmentCards[developmentCardType] = nextCount;
+        }
+
+        return true;
     }
 
     private static LobbyOperationResult<GameSessionResponse>? TryBuildRoad(
@@ -600,7 +1123,9 @@ public sealed class CatanGameSessionService : IGameSessionService
         if (smallerVertexId is null || biggerVertexId is null)
             return LobbyOperationResult<GameSessionResponse>.Validation("Informe os vértices da aresta para construir a estrada.");
 
-        if (!HasRequiredResources(actingPlayer, RoadCost))
+        var isRoadBuilderPlacement = session.PendingRoadBuilderRoads > 0;
+
+        if (!isRoadBuilderPlacement && !HasRequiredResources(actingPlayer, RoadCost))
             return LobbyOperationResult<GameSessionResponse>.Validation("Recursos insuficientes para construir uma estrada.");
 
         if (actingPlayer.RemainingRoads <= 0)
@@ -620,16 +1145,188 @@ public sealed class CatanGameSessionService : IGameSessionService
         if (!IsValidRoadPlacement(session.Board, actingPlayer.UsuarioId, edgeKey))
             return LobbyOperationResult<GameSessionResponse>.Validation("A estrada deve ser conectada à sua rede de construções.");
 
-        foreach (var cost in RoadCost)
+        if (!isRoadBuilderPlacement)
         {
-            actingPlayer.Resources[cost.ResourceType] -= cost.Amount;
-            ReturnToBank(session, cost.ResourceType, cost.Amount);
+            foreach (var cost in RoadCost)
+            {
+                actingPlayer.Resources[cost.ResourceType] -= cost.Amount;
+                ReturnToBank(session, cost.ResourceType, cost.Amount);
+            }
         }
 
         edge.OwnerPlayerId = actingPlayer.UsuarioId;
         actingPlayer.RemainingRoads = Math.Max(0, actingPlayer.RemainingRoads - 1);
+        if (isRoadBuilderPlacement)
+        {
+            session.PendingRoadBuilderRoads = Math.Max(0, session.PendingRoadBuilderRoads - 1);
+            if (actingPlayer.RemainingRoads <= 0 || !HasAvailableRoadPlacement(session.Board, actingPlayer.UsuarioId))
+            {
+                session.PendingRoadBuilderRoads = 0;
+            }
+        }
+        UpdatePlayerLongestRoad(session, actingPlayer);
 
         return null;
+    }
+
+    private static bool HasAvailableRoadPlacement(CatanBoardState board, int playerId)
+    {
+        return board.Edges.Any(edge =>
+            edge.OwnerPlayerId is null
+            && IsValidRoadPlacement(board, playerId, edge.EdgeKey));
+    }
+
+    private static void UpdatePlayerLongestRoad(CatanGameSessionState session, CatanPlayerState player)
+    {
+        player.MaiorEstradaContinua = ComputeLongestRoadForPlayer(session.Board, player.UsuarioId);
+        UpdateLongestRoad(session, player.UsuarioId);
+    }
+
+    private static void UpdateLongestRoad(CatanGameSessionState session, int? preferredOwnerId = null)
+    {
+        UpdateAwardOwner(
+            session,
+            minimumCount: 5,
+            preferredOwnerId,
+            player => player.MaiorEstradaContinua,
+            player => player.HasLongestRoad,
+            (player, hasAward) => player.HasLongestRoad = hasAward);
+    }
+
+    private static void UpdateLargestArmy(CatanGameSessionState session, int? preferredOwnerId = null)
+    {
+        UpdateAwardOwner(
+            session,
+            minimumCount: 3,
+            preferredOwnerId,
+            player => player.UsedKnightsCount,
+            player => player.HasLargestArmy,
+            (player, hasAward) => player.HasLargestArmy = hasAward);
+    }
+
+    private static void UpdateAwardOwner(
+        CatanGameSessionState session,
+        int minimumCount,
+        int? preferredOwnerId,
+        Func<CatanPlayerState, int> getCount,
+        Func<CatanPlayerState, bool> hasAward,
+        Action<CatanPlayerState, bool> setAward)
+    {
+        var currentOwner = session.Players.SingleOrDefault(hasAward);
+        CatanPlayerState? nextOwner = currentOwner;
+
+        if (currentOwner is not null && getCount(currentOwner) < minimumCount)
+        {
+            setAward(currentOwner, false);
+            currentOwner.Pontos = Math.Max(0, currentOwner.Pontos - 2);
+            nextOwner = null;
+        }
+
+        if (nextOwner is not null)
+        {
+            var challenger = session.Players
+                .Where(player => player.UsuarioId != nextOwner.UsuarioId && getCount(player) > getCount(nextOwner))
+                .OrderByDescending(getCount)
+                .FirstOrDefault();
+
+            if (challenger is null)
+                return;
+
+            setAward(nextOwner, false);
+            nextOwner.Pontos = Math.Max(0, nextOwner.Pontos - 2);
+            nextOwner = challenger;
+        }
+
+        var eligiblePlayers = session.Players
+            .Where(player => getCount(player) >= minimumCount)
+            .OrderByDescending(getCount)
+            .ToList();
+
+        if (eligiblePlayers.Count == 0)
+            return;
+
+        var preferredOwner = preferredOwnerId is null
+            ? null
+            : eligiblePlayers.FirstOrDefault(player => player.UsuarioId == preferredOwnerId.Value);
+        if (preferredOwner is null
+            && eligiblePlayers.Count > 1
+            && getCount(eligiblePlayers[0]) == getCount(eligiblePlayers[1]))
+        {
+            return;
+        }
+
+        nextOwner = preferredOwner ?? eligiblePlayers[0];
+        setAward(nextOwner, true);
+        nextOwner.Pontos += 2;
+    }
+
+    private static int ComputeLongestRoadForPlayer(CatanBoardState board, int playerId)
+    {
+        var playerEdges = board.Edges
+            .Where(edge => edge.OwnerPlayerId == playerId)
+            .Select(edge => edge.EdgeKey)
+            .ToHashSet();
+
+        if (playerEdges.Count == 0)
+            return 1;
+
+        var edgesByVertex = new Dictionary<int, List<EdgeKey>>();
+        foreach (var edge in playerEdges)
+        {
+            if (!edgesByVertex.TryGetValue(edge.smallerVertexId, out var fromList))
+                edgesByVertex[edge.smallerVertexId] = fromList = [];
+            fromList.Add(edge);
+
+            if (!edgesByVertex.TryGetValue(edge.biggerVertexId, out var toList))
+                edgesByVertex[edge.biggerVertexId] = toList = [];
+            toList.Add(edge);
+        }
+
+        var ownerByVertex = board.Vertices.ToDictionary(vertex => vertex.VertexId, vertex => vertex.OwnerPlayerId);
+        var visited = new HashSet<EdgeKey>();
+        var best = 0;
+
+        foreach (var startVertexId in edgesByVertex.Keys)
+        {
+            ExploreLongestRoad(startVertexId, 0);
+        }
+
+        return Math.Max(1, best);
+
+        void ExploreLongestRoad(int currentVertexId, int currentLength)
+        {
+            if (currentLength > best)
+                best = currentLength;
+
+            if (IsBlockedByOpponent(currentVertexId))
+                return;
+
+            if (!edgesByVertex.TryGetValue(currentVertexId, out var adjacentEdges))
+                return;
+
+            foreach (var edge in adjacentEdges)
+            {
+                if (!visited.Add(edge))
+                    continue;
+
+                var nextVertexId = edge.smallerVertexId == currentVertexId ? edge.biggerVertexId : edge.smallerVertexId;
+                ExploreLongestRoad(nextVertexId, currentLength + 1);
+                visited.Remove(edge);
+            }
+        }
+
+        bool IsBlockedByOpponent(int vertexId)
+        {
+            if (!ownerByVertex.TryGetValue(vertexId, out var ownerPlayerId)
+                || ownerPlayerId is null
+                || ownerPlayerId.Value == playerId)
+            {
+                return false;
+            }
+
+            var vertex = board.Vertices.FirstOrDefault(item => item.VertexId == vertexId);
+            return vertex is not null && IsVillageOrCity(vertex);
+        }
     }
 
     private static LobbyOperationResult<GameSessionResponse>? TryBuildVillage(
@@ -674,6 +1371,7 @@ public sealed class CatanGameSessionService : IGameSessionService
         vertex.BuildingType = SettlementBuildingType;
         actingPlayer.Pontos += 1;
         actingPlayer.RemainingSettlements = Math.Max(0, actingPlayer.RemainingSettlements - 1);
+        UpdateBlockedPlayersLongestRoadAtVertex(session, vertex.VertexId, actingPlayer.UsuarioId);
 
         return null;
     }
@@ -712,8 +1410,30 @@ public sealed class CatanGameSessionService : IGameSessionService
         actingPlayer.Pontos += 1;
         actingPlayer.RemainingCities = Math.Max(0, actingPlayer.RemainingCities - 1);
         actingPlayer.RemainingSettlements = Math.Min(5, actingPlayer.RemainingSettlements + 1);
+        UpdateBlockedPlayersLongestRoadAtVertex(session, vertex.VertexId, actingPlayer.UsuarioId);
 
         return null;
+    }
+
+    private static void UpdateBlockedPlayersLongestRoadAtVertex(CatanGameSessionState session, int vertexId, int blockingPlayerId)
+    {
+        var affectedPlayerIds = session.Board.Edges
+            .Where(edge =>
+                edge.OwnerPlayerId is not null
+                && edge.OwnerPlayerId.Value != blockingPlayerId
+                && (edge.EdgeKey.smallerVertexId == vertexId || edge.EdgeKey.biggerVertexId == vertexId))
+            .Select(edge => edge.OwnerPlayerId!.Value)
+            .Distinct()
+            .ToList();
+
+        foreach (var affectedPlayerId in affectedPlayerIds)
+        {
+            var affectedPlayer = session.Players.FirstOrDefault(player => player.UsuarioId == affectedPlayerId);
+            if (affectedPlayer is null)
+                continue;
+
+            UpdatePlayerLongestRoad(session, affectedPlayer);
+        }
     }
 
     private static bool IsValidRoadPlacement(CatanBoardState board, int playerId, EdgeKey targetEdge)
@@ -743,7 +1463,7 @@ public sealed class CatanGameSessionService : IGameSessionService
         if (vertex.OwnerPlayerId == playerId)
             return true;
 
-        if (vertex.OwnerPlayerId is not null)
+        if (HasOpponentVillageOrCity(vertex, playerId))
             return false;
 
         if (!edgesByVertex.TryGetValue(vertexId, out var adjacentEdges))
@@ -798,9 +1518,122 @@ public sealed class CatanGameSessionService : IGameSessionService
             OfferedResources = offeredResources,
             AskedResources = askedResources,
             CreatedAtUtc = createdAtUtc,
-            ExpiresAtUtc = createdAtUtc.Add(TradeOfferLifetime)
+            ExpiresAtUtc = createdAtUtc.Add(TradeOfferLifetime),
+            AcceptedByPlayerId = session.Players
+                .Where(player => player.UsuarioId != actingPlayer.UsuarioId)
+                .ToDictionary(player => player.UsuarioId, _ => false)
         });
 
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TrySetTradeOfferAcceptance(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        long? offerId,
+        bool accepted)
+    {
+        if (offerId is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("A oferta de troca é obrigatória.");
+        }
+
+        var offer = session.ActiveTradeOffers.FirstOrDefault(item => item.OfferId == offerId.Value);
+        if (offer is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("A oferta de troca não está mais ativa.");
+        }
+
+        if (offer.OffererPlayerId == actingPlayer.UsuarioId)
+        {
+            if (accepted)
+            {
+                return LobbyOperationResult<GameSessionResponse>.Validation("O propositor não pode aceitar a própria oferta.");
+            }
+
+            session.ActiveTradeOffers.Remove(offer);
+            return null;
+        }
+
+        if (accepted && offer.AskedResources.Any(resource => actingPlayer.Resources.GetValueOrDefault(resource.Key) < resource.Value))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui os recursos pedidos para aceitar esta troca.");
+        }
+
+        offer.AcceptedByPlayerId[actingPlayer.UsuarioId] = accepted;
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryExecuteTrade(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        long? offerId,
+        int? targetPlayerId)
+    {
+        if (offerId is null || targetPlayerId is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("A oferta e o jogador escolhido são obrigatórios.");
+        }
+
+        var offer = session.ActiveTradeOffers.FirstOrDefault(item => item.OfferId == offerId.Value);
+        if (offer is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("A oferta de troca não está mais ativa.");
+        }
+
+        if (offer.OffererPlayerId != actingPlayer.UsuarioId)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Forbidden("Apenas o propositor pode concluir esta troca.");
+        }
+
+        var recipient = session.Players.FirstOrDefault(player => player.UsuarioId == targetPlayerId.Value);
+        if (recipient is null || !recipient.IsConnected)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("O jogador escolhido não está disponível para a troca.");
+        }
+
+        if (!offer.AcceptedByPlayerId.GetValueOrDefault(recipient.UsuarioId))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("O jogador escolhido ainda não aceitou a troca.");
+        }
+
+        if (offer.OfferedResources.Any(resource => actingPlayer.Resources.GetValueOrDefault(resource.Key) < resource.Value))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Você não possui mais recursos suficientes para concluir esta troca.");
+        }
+
+        if (offer.AskedResources.Any(resource => recipient.Resources.GetValueOrDefault(resource.Key) < resource.Value))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("O jogador escolhido não possui mais recursos suficientes para concluir esta troca.");
+        }
+
+        foreach (var resource in offer.OfferedResources)
+        {
+            actingPlayer.Resources[resource.Key] = actingPlayer.Resources.GetValueOrDefault(resource.Key) - resource.Value;
+            recipient.Resources[resource.Key] = recipient.Resources.GetValueOrDefault(resource.Key) + resource.Value;
+        }
+
+        foreach (var resource in offer.AskedResources)
+        {
+            recipient.Resources[resource.Key] = recipient.Resources.GetValueOrDefault(resource.Key) - resource.Value;
+            actingPlayer.Resources[resource.Key] = actingPlayer.Resources.GetValueOrDefault(resource.Key) + resource.Value;
+        }
+
+        session.PlayerTradeHistory.Add(new CatanPlayerTradeHistoryEntryState
+        {
+            OccurredAtUtc = DateTime.UtcNow,
+            OffererPlayerId = actingPlayer.UsuarioId,
+            RecipientPlayerId = recipient.UsuarioId,
+            OfferedResources = new Dictionary<string, int>(offer.OfferedResources, StringComparer.OrdinalIgnoreCase),
+            AskedResources = new Dictionary<string, int>(offer.AskedResources, StringComparer.OrdinalIgnoreCase)
+        });
+
+        if (session.PlayerTradeHistory.Count > 20)
+        {
+            session.PlayerTradeHistory.RemoveAt(0);
+        }
+
+        session.ActiveTradeOffers.Remove(offer);
         return null;
     }
 
@@ -969,10 +1802,22 @@ public sealed class CatanGameSessionService : IGameSessionService
         }
     }
 
+    private static void ResetRobberResolution(CatanGameSessionState session)
+    {
+        session.AwaitingRobberPlacement = false;
+        session.PendingRobberTileId = null;
+        session.PendingRobberVictimPlayerIds.Clear();
+    }
+
     private static bool HasAnyPendingDiscards(CatanGameSessionState session)
     {
         EnsurePendingDiscardStateInitialized(session);
         return session.PendingDiscardByPlayerId.Any(entry => entry.Value > 0);
+    }
+
+    private static bool IsRobberResolutionPending(CatanGameSessionState session)
+    {
+        return session.AwaitingRobberPlacement || session.PendingRobberVictimPlayerIds.Count > 0;
     }
 
     private static int GetPendingDiscardAmountForPlayer(CatanGameSessionState session, int usuarioId)
@@ -1025,7 +1870,188 @@ public sealed class CatanGameSessionService : IGameSessionService
         }
 
         session.PendingDiscardByPlayerId.Remove(actingPlayer.UsuarioId);
+        if (!HasAnyPendingDiscards(session) && WasSevenRolledThisTurn(session))
+        {
+            session.AwaitingRobberPlacement = true;
+        }
+
         return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryMoveRobber(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        int? tileId)
+    {
+        if (!session.AwaitingRobberPlacement)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("O ladrão não está aguardando reposicionamento.");
+        }
+
+        if (tileId is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Informe o hexágono para posicionar o ladrão.");
+        }
+
+        var targetTile = session.Board.Tiles.FirstOrDefault(tile => tile.TileId == tileId.Value);
+        if (targetTile is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Hexágono inválido para o ladrão.");
+        }
+
+        if (session.Board.RobberTileId == targetTile.TileId)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("O ladrão já está neste hexágono.");
+        }
+
+        session.Board.RobberTileId = targetTile.TileId;
+        session.AwaitingRobberPlacement = false;
+
+        var eligibleVictimIds = GetEligibleRobberVictimPlayerIds(session, actingPlayer.UsuarioId, targetTile)
+            .ToList();
+
+        if (eligibleVictimIds.Count == 0)
+        {
+            session.PendingRobberTileId = null;
+            session.PendingRobberVictimPlayerIds.Clear();
+            return null;
+        }
+
+        if (eligibleVictimIds.Count == 1)
+        {
+            return StealRandomResourceFromPlayer(session, actingPlayer, eligibleVictimIds[0]);
+        }
+
+        session.PendingRobberTileId = targetTile.TileId;
+        session.PendingRobberVictimPlayerIds = eligibleVictimIds;
+        return null;
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? TryChooseRobberVictim(
+        CatanGameSessionState session,
+        CatanPlayerState actingPlayer,
+        int? targetPlayerId)
+    {
+        if (session.PendingRobberVictimPlayerIds.Count <= 1 || session.PendingRobberTileId is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Não existe escolha de vítima pendente para o ladrão.");
+        }
+
+        if (targetPlayerId is null || !session.PendingRobberVictimPlayerIds.Contains(targetPlayerId.Value))
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Jogador inválido para o roubo do ladrão.");
+        }
+
+        return StealRandomResourceFromPlayer(session, actingPlayer, targetPlayerId.Value);
+    }
+
+    private static LobbyOperationResult<GameSessionResponse>? StealRandomResourceFromPlayer(
+        CatanGameSessionState session,
+        CatanPlayerState thief,
+        int victimPlayerId)
+    {
+        var victim = session.Players.FirstOrDefault(player => player.UsuarioId == victimPlayerId);
+        if (victim is null)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("Jogador selecionado para roubo não foi encontrado.");
+        }
+
+        var victimResources = ExpandPlayerResources(victim.Resources);
+        if (victimResources.Count == 0)
+        {
+            return LobbyOperationResult<GameSessionResponse>.Validation("O jogador selecionado não possui cartas de recurso para roubo.");
+        }
+
+        var stolenResource = victimResources[Random.Shared.Next(victimResources.Count)];
+
+        victim.Resources.TryGetValue(stolenResource, out var victimCurrentAmount);
+        victim.Resources[stolenResource] = victimCurrentAmount - 1;
+
+        thief.Resources.TryGetValue(stolenResource, out var thiefCurrentAmount);
+        thief.Resources[stolenResource] = thiefCurrentAmount + 1;
+
+        session.RobberTheftHistory.Add(new CatanRobberTheftHistoryEntryState
+        {
+            OccurredAtUtc = DateTime.UtcNow,
+            ThiefPlayerId = thief.UsuarioId,
+            VictimPlayerId = victim.UsuarioId,
+            StolenResourceType = stolenResource
+        });
+
+        if (session.RobberTheftHistory.Count > 20)
+        {
+            session.RobberTheftHistory.RemoveAt(0);
+        }
+
+        session.PendingRobberTileId = null;
+        session.PendingRobberVictimPlayerIds.Clear();
+        session.AwaitingRobberPlacement = false;
+
+        return null;
+    }
+
+    private static List<string> ExpandPlayerResources(IReadOnlyDictionary<string, int>? resources)
+    {
+        var expanded = new List<string>();
+
+        if (resources is null)
+        {
+            return expanded;
+        }
+
+        foreach (var resource in resources)
+        {
+            if (string.IsNullOrWhiteSpace(resource.Key) || resource.Value <= 0)
+            {
+                continue;
+            }
+
+            for (var index = 0; index < resource.Value; index++)
+            {
+                expanded.Add(resource.Key);
+            }
+        }
+
+        return expanded;
+    }
+
+    private static IEnumerable<int> GetEligibleRobberVictimPlayerIds(
+        CatanGameSessionState session,
+        int thiefPlayerId,
+        CatanTileState tile)
+    {
+        var victimIds = new HashSet<int>();
+
+        foreach (var vertex in GetVerticesAdjacentToTile(session.Board, tile))
+        {
+            if (vertex.OwnerPlayerId is null || vertex.OwnerPlayerId == thiefPlayerId)
+            {
+                continue;
+            }
+
+            if (!string.Equals(vertex.BuildingType, SettlementBuildingType, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(vertex.BuildingType, CityBuildingType, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var victim = session.Players.FirstOrDefault(player => player.UsuarioId == vertex.OwnerPlayerId.Value);
+            if ((victim?.Resources.Values.Sum() ?? 0) <= 0)
+            {
+                continue;
+            }
+
+            victimIds.Add(vertex.OwnerPlayerId.Value);
+        }
+
+        return victimIds;
+    }
+
+    private static bool WasSevenRolledThisTurn(CatanGameSessionState session)
+    {
+        return session.LastDice1 is not null
+            && session.LastDice2 is not null
+            && (session.LastDice1.Value + session.LastDice2.Value) == 7;
     }
 
     private static void InitializeDevelopmentDeck(CatanBankState bank, int? remainingCardCount = null)
@@ -1095,6 +2121,7 @@ public sealed class CatanGameSessionService : IGameSessionService
 
         var producingTiles = session.Board.Tiles.Where(tile =>
             tile.NumberToken == rolledTotal &&
+            tile.TileId != session.Board.RobberTileId &&
             !string.Equals(tile.ResourceType, DesertResourceType, StringComparison.OrdinalIgnoreCase));
 
         foreach (var tile in producingTiles)
@@ -1204,8 +2231,21 @@ public sealed class CatanGameSessionService : IGameSessionService
         return adjacentVertexIds.Any(adjacentVertexId =>
         {
             var adjacentVertex = session.Board.Vertices.FirstOrDefault(vertex => vertex.VertexId == adjacentVertexId);
-            return adjacentVertex is not null && adjacentVertex.OwnerPlayerId is not null;
+            return adjacentVertex is not null && IsVillageOrCity(adjacentVertex);
         });
+    }
+
+    private static bool HasOpponentVillageOrCity(CatanVertexState vertex, int playerId)
+    {
+        return vertex.OwnerPlayerId is not null
+            && vertex.OwnerPlayerId.Value != playerId
+            && IsVillageOrCity(vertex);
+    }
+
+    private static bool IsVillageOrCity(CatanVertexState vertex)
+    {
+        return string.Equals(vertex.BuildingType, SettlementBuildingType, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(vertex.BuildingType, CityBuildingType, StringComparison.OrdinalIgnoreCase);
     }
 
     private static CatanBoardState Create34TraditionalBoardState()
@@ -1334,6 +2374,9 @@ public sealed class CatanGameSessionService : IGameSessionService
                 };
             })
             .ToList();
+
+        board.RobberTileId = tiles.FirstOrDefault(tile =>
+            string.Equals(tile.ResourceType, DesertResourceType, StringComparison.OrdinalIgnoreCase))?.TileId;
 
         board.Vertices = vertices.Values.ToList();
         board.Tiles = tiles;
@@ -1506,31 +2549,51 @@ public sealed class CatanGameSessionService : IGameSessionService
         var pendingDiscardForCurrentUser = GetPendingDiscardAmountForPlayer(session, usuarioId);
         var hasPendingDiscardForCurrentUser = pendingDiscardForCurrentUser > 0;
         var hasAnyPendingDiscards = HasAnyPendingDiscards(session);
+        var isAwaitingRobberPlacement = session.AwaitingRobberPlacement && canCurrentUserAct;
+        var isAwaitingRobberVictimChoice = session.PendingRobberVictimPlayerIds.Count > 1 && canCurrentUserAct;
+        var isRobberPendingForCurrentUser = isAwaitingRobberPlacement || isAwaitingRobberVictimChoice;
         var isSetupPhase = session.Phase == GameTipoFase.SetupInicial;
         var canPlaceInitialSettlement = isSetupPhase && canCurrentUserAct && !session.AwaitingInitialRoadPlacement;
         var canPlaceInitialRoad = isSetupPhase && canCurrentUserAct && session.AwaitingInitialRoadPlacement && session.PendingInitialRoadFromVertexId is not null;
         var pendingRoadVertexId = session.PendingInitialRoadFromVertexId;
 
         var isTurnPhase = session.Phase == GameTipoFase.Turno;
-        var canRollDice = isTurnPhase && canCurrentUserAct && !session.HasRolledDiceThisTurn && !hasAnyPendingDiscards;
-        var canEndTurn = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn && !hasAnyPendingDiscards;
-        var canTradeWithBank = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn && !hasAnyPendingDiscards;
+        var canRollDice = isTurnPhase && canCurrentUserAct && !session.HasRolledDiceThisTurn && !hasAnyPendingDiscards && !isRobberPendingForCurrentUser;
+        var canEndTurn = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn && !hasAnyPendingDiscards && !isRobberPendingForCurrentUser;
+        var canTradeWithBank = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn && !hasAnyPendingDiscards && !isRobberPendingForCurrentUser;
         var canBuyDevelopmentCard = isTurnPhase
             && canCurrentUserAct
             && session.HasRolledDiceThisTurn
             && !hasAnyPendingDiscards
+            && !isRobberPendingForCurrentUser
             && session.Bank.DevelopmentCardDeck.Count > 0
             && HasRequiredResources(currentPlayer, DevelopmentCardCost);
-        var canBuildRoad = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn
-            && !hasAnyPendingDiscards
+        var canPlayKnight = canCurrentUserAct
+            && PodeJogarDesenvolvimento(session, currentPlayer, DevelopmentCardTypes.Knight);
+        var canPlayRoadBuilder = canCurrentUserAct
             && currentPlayer.RemainingRoads > 0
-            && HasRequiredResources(currentPlayer, RoadCost);
+            && HasAvailableRoadPlacement(session.Board, currentPlayer.UsuarioId)
+            && PodeJogarDesenvolvimento(session, currentPlayer, DevelopmentCardTypes.RoadBuilder);
+        var canPlayPlus2Resources = canCurrentUserAct
+            && session.Bank.ResourceCounts.Values.Sum() >= 2
+            && PodeJogarDesenvolvimento(session, currentPlayer, DevelopmentCardTypes.Plus2Resources);
+        var canPlayMonopoly = canCurrentUserAct
+            && PodeJogarDesenvolvimento(session, currentPlayer, DevelopmentCardTypes.Monopoly);
+        var isRoadBuilderPlacement = session.PendingRoadBuilderRoads > 0;
+        var canBuildRoad = isTurnPhase && canCurrentUserAct
+            && (isRoadBuilderPlacement || session.HasRolledDiceThisTurn)
+            && !hasAnyPendingDiscards
+            && !isRobberPendingForCurrentUser
+            && currentPlayer.RemainingRoads > 0
+            && (isRoadBuilderPlacement || HasRequiredResources(currentPlayer, RoadCost));
         var canBuildVillage = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn
             && !hasAnyPendingDiscards
+            && !isRobberPendingForCurrentUser
             && currentPlayer.RemainingSettlements > 0
             && HasRequiredResources(currentPlayer, VillageCost);
         var canBuildCity = isTurnPhase && canCurrentUserAct && session.HasRolledDiceThisTurn
             && !hasAnyPendingDiscards
+            && !isRobberPendingForCurrentUser
             && currentPlayer.RemainingCities > 0
             && HasRequiredResources(currentPlayer, CityCost)
             && session.Board.Vertices.Any(v => v.OwnerPlayerId == currentPlayer.UsuarioId
@@ -1540,6 +2603,21 @@ public sealed class CatanGameSessionService : IGameSessionService
         if (hasPendingDiscardForCurrentUser)
         {
             availableActions.Add(GameActionTypes.DiscardResources);
+        }
+        else if (isAwaitingRobberPlacement)
+        {
+            availableActions.Add(GameActionTypes.MoveRobber);
+        }
+        else if (isAwaitingRobberVictimChoice)
+        {
+            availableActions.Add(GameActionTypes.ChooseRobberVictim);
+        }
+        else if (isRoadBuilderPlacement)
+        {
+            if (canBuildRoad)
+            {
+                availableActions.Add(GameActionTypes.BuildRoad);
+            }
         }
         else
         {
@@ -1554,6 +2632,22 @@ public sealed class CatanGameSessionService : IGameSessionService
             if (canRollDice)
             {
                 availableActions.Add(GameActionTypes.RollDice);
+            }
+            if (canPlayKnight)
+            {
+                availableActions.Add(GameActionTypes.PlayKnight);
+            }
+            if (canPlayRoadBuilder)
+            {
+                availableActions.Add(GameActionTypes.PlayRoadBuilder);
+            }
+            if (canPlayPlus2Resources)
+            {
+                availableActions.Add(GameActionTypes.PlayPlus2Resources);
+            }
+            if (canPlayMonopoly)
+            {
+                availableActions.Add(GameActionTypes.PlayMonopoly);
             }
             if (canEndTurn)
             {
@@ -1602,6 +2696,12 @@ public sealed class CatanGameSessionService : IGameSessionService
                     RemainingRoads = player.RemainingRoads,
                     RemainingSettlements = player.RemainingSettlements,
                     RemainingCities = player.RemainingCities,
+                    MaiorEstradaContinua = player.MaiorEstradaContinua > 0
+                        ? player.MaiorEstradaContinua
+                        : ComputeLongestRoadForPlayer(session.Board, player.UsuarioId),
+                    UsedKnightsCount = Math.Max(0, player.UsedKnightsCount),
+                    HasLongestRoad = player.HasLongestRoad,
+                    HasLargestArmy = player.HasLargestArmy,
                     Resources = new Dictionary<string, int>(player.Resources),
                     DevelopmentCards = player.UsuarioId == usuarioId
                         ? new Dictionary<string, int>(player.DevelopmentCards, StringComparer.OrdinalIgnoreCase)
@@ -1620,6 +2720,7 @@ public sealed class CatanGameSessionService : IGameSessionService
                 AwaitingInitialRoadPlacement = session.AwaitingInitialRoadPlacement,
                 PendingInitialRoadFromVertexId = pendingRoadVertexId,
                 HasRolledDiceThisTurn = session.HasRolledDiceThisTurn,
+                PendingRoadBuilderRoads = session.PendingRoadBuilderRoads,
                 LastDice1 = session.LastDice1,
                 LastDice2 = session.LastDice2,
                 LastDiceTotal = session.LastDice1 is not null && session.LastDice2 is not null
@@ -1661,7 +2762,38 @@ public sealed class CatanGameSessionService : IGameSessionService
                             .ToList()
                     })
                     .ToList(),
+                RobberTheftHistory = session.RobberTheftHistory
+                    .Select(entry => new RobberTheftHistoryEntryResponse
+                    {
+                        OccurredAtUtc = entry.OccurredAtUtc,
+                        ThiefPlayerId = entry.ThiefPlayerId,
+                        VictimPlayerId = entry.VictimPlayerId,
+                        VisibleResourceType = usuarioId == entry.ThiefPlayerId || usuarioId == entry.VictimPlayerId
+                            ? entry.StolenResourceType
+                            : "coringa"
+                    })
+                    .ToList(),
+                KnightPlayHistory = session.KnightPlayHistory
+                    .Select(entry => new KnightPlayHistoryEntryResponse
+                    {
+                        OccurredAtUtc = entry.OccurredAtUtc,
+                        PlayerId = entry.PlayerId
+                    })
+                    .ToList(),
+                PlayerTradeHistory = session.PlayerTradeHistory
+                    .Select(entry => new PlayerTradeHistoryEntryResponse
+                    {
+                        OccurredAtUtc = entry.OccurredAtUtc,
+                        OffererPlayerId = entry.OffererPlayerId,
+                        RecipientPlayerId = entry.RecipientPlayerId,
+                        OfferedResources = new Dictionary<string, int>(entry.OfferedResources, StringComparer.OrdinalIgnoreCase),
+                        AskedResources = new Dictionary<string, int>(entry.AskedResources, StringComparer.OrdinalIgnoreCase)
+                    })
+                    .ToList(),
                 RobberTileId = session.Board.RobberTileId,
+                AwaitingRobberPlacement = session.AwaitingRobberPlacement,
+                PendingRobberTileId = session.PendingRobberTileId,
+                PendingRobberVictimPlayerIds = [.. session.PendingRobberVictimPlayerIds],
                 ActiveTradeOffers = session.ActiveTradeOffers
                     .OrderByDescending(offer => offer.CreatedAtUtc)
                     .Select(offer => new TradeOfferResponse
@@ -1673,7 +2805,8 @@ public sealed class CatanGameSessionService : IGameSessionService
                         OfferedResources = new Dictionary<string, int>(offer.OfferedResources, StringComparer.OrdinalIgnoreCase),
                         AskedResources = new Dictionary<string, int>(offer.AskedResources, StringComparer.OrdinalIgnoreCase),
                         CreatedAtUtc = offer.CreatedAtUtc,
-                        ExpiresAtUtc = offer.ExpiresAtUtc
+                        ExpiresAtUtc = offer.ExpiresAtUtc,
+                        AcceptedByPlayerId = new Dictionary<int, bool>(offer.AcceptedByPlayerId)
                     })
                     .ToList(),
                 width = session.Board.width,

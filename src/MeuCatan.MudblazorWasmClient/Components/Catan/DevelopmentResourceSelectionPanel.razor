@@ -1,0 +1,90 @@
+<div class="development-resource-selection-overlay">
+    <MudPaper Class="pa-3 development-resource-selection-panel" Elevation="6">
+        <MudStack Spacing="2">
+            <div class="development-resource-options">
+                @foreach (var resource in ResourceOrder)
+                {
+                    <ResourceCard Token="true" ResourceType="@resource" Count="0"
+                                  OnClick="@(() => HandleResourceSelected(resource))" />
+                }
+            </div>
+
+            <div class="development-resource-selection">
+                @foreach (var resource in SelectedResourceEntries)
+                {
+                    <ResourceCard Token="true" ResourceType="@resource.Key" Count="@resource.Value"
+                                  OnClick="@(() => HandleResourceRemoved(resource.Key))" />
+                }
+            </div>
+
+            <MudStack Row="true" Justify="Justify.FlexEnd">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!CanConfirm)"
+                           OnClick="HandleConfirm">
+                    confirma
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+</div>
+
+@code {
+    private static readonly string[] ResourceOrder =
+    [
+        "madeira",
+        "argila",
+        "ovelha",
+        "trigo",
+        "pedra"
+    ];
+
+    [Parameter]
+    public int RequiredAmount { get; set; }
+
+    [Parameter]
+    public IReadOnlyDictionary<string, int> SelectedResources { get; set; } = new Dictionary<string, int>();
+
+    [Parameter]
+    public EventCallback<string> OnResourceSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnResourceRemoved { get; set; }
+
+    [Parameter]
+    public EventCallback OnConfirm { get; set; }
+
+    private int SelectedCount => SelectedResources.Values.Sum();
+
+    private bool CanConfirm => RequiredAmount > 0
+        && SelectedCount == RequiredAmount
+        && OnConfirm.HasDelegate;
+
+    private IEnumerable<KeyValuePair<string, int>> SelectedResourceEntries => SelectedResources
+        .Where(resource => resource.Value > 0)
+        .OrderBy(resource =>
+        {
+            var index = Array.IndexOf(ResourceOrder, resource.Key);
+            return index >= 0 ? index : int.MaxValue;
+        })
+        .ThenBy(resource => resource.Key, StringComparer.OrdinalIgnoreCase);
+
+    private Task HandleResourceSelected(string resourceType)
+    {
+        return OnResourceSelected.HasDelegate
+            ? OnResourceSelected.InvokeAsync(resourceType)
+            : Task.CompletedTask;
+    }
+
+    private Task HandleResourceRemoved(string resourceType)
+    {
+        return OnResourceRemoved.HasDelegate
+            ? OnResourceRemoved.InvokeAsync(resourceType)
+            : Task.CompletedTask;
+    }
+
+    private Task HandleConfirm()
+    {
+        return CanConfirm
+            ? OnConfirm.InvokeAsync()
+            : Task.CompletedTask;
+    }
+}

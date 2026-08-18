@@ -1,17 +1,31 @@
-<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plus Two Resources">
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Covered resource wagon">
   <defs>
-    <linearGradient id="plusResA" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#dbeafe"/>
-      <stop offset="100%" stop-color="#60a5fa"/>
+    <linearGradient id="wagonWood" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#d89a4e"/>
+      <stop offset="100%" stop-color="#92400e"/>
     </linearGradient>
-    <linearGradient id="plusResB" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#fed7aa"/>
-      <stop offset="100%" stop-color="#f97316"/>
+    <linearGradient id="wagonCanvas" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#bbf7d0"/>
+      <stop offset="100%" stop-color="#4d7c0f"/>
     </linearGradient>
   </defs>
 
-  <circle cx="23" cy="35" r="12" fill="url(#plusResA)" stroke="#1d4ed8" stroke-width="2"/>
-  <circle cx="41" cy="29" r="12" fill="url(#plusResB)" stroke="#c2410c" stroke-width="2"/>
-  <path d="M32 13c0.8 0 1.5 0.7 1.5 1.5v6h6c0.8 0 1.5 0.7 1.5 1.5s-0.7 1.5-1.5 1.5h-6v6c0 0.8-0.7 1.5-1.5 1.5s-1.5-0.7-1.5-1.5v-6h-6c-0.8 0-1.5-0.7-1.5-1.5s0.7-1.5 1.5-1.5h6v-6c0-0.8 0.7-1.5 1.5-1.5z" fill="#0f172a"/>
-  <text x="32" y="54" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#0f172a">+2</text>
+  <path d="M17 24h13v13H17z" fill="#d6a15f" stroke="#78350f" stroke-width="1.5"/>
+  <path d="M30 20h14v17H30z" fill="#c9873d" stroke="#78350f" stroke-width="1.5"/>
+  <path d="M17 28h13M36 20v17" fill="none" stroke="#9a5b24" stroke-width="1" opacity="0.8"/>
+
+  <path d="M12 33c2-9 8-16 15-16 3 0 5 2 7 2 3 0 5-2 8-1 6 2 9 8 9 15l-5 4H17z" fill="url(#wagonCanvas)" stroke="#365314" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M17 23c5 3 6 8 6 14M34 20c4 4 5 10 5 17M47 25c-2 3-3 7-3 11" fill="none" stroke="#e2f5c4" stroke-width="1.5" opacity="0.65"/>
+  <path d="M14 34l5 4M49 33l-5 5" fill="none" stroke="#713f12" stroke-width="1.5" stroke-linecap="round"/>
+
+  <path d="M11 35h41l-4 12H16z" fill="url(#wagonWood)" stroke="#5b2c0b" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M17 41h31M23 36l-2 10M39 36l2 10" fill="none" stroke="#f2c078" stroke-width="1.5" opacity="0.7"/>
+  <path d="M51 38l9-4M50 42l10-3" fill="none" stroke="#5b2c0b" stroke-width="2" stroke-linecap="round"/>
+
+  <circle cx="21" cy="49" r="7" fill="#713f12" stroke="#3f230d" stroke-width="2"/>
+  <circle cx="21" cy="49" r="2" fill="#d6a15f"/>
+  <path d="M21 43v12M15 49h12" fill="none" stroke="#d6a15f" stroke-width="1.5"/>
+  <circle cx="44" cy="49" r="7" fill="#713f12" stroke="#3f230d" stroke-width="2"/>
+  <circle cx="44" cy="49" r="2" fill="#d6a15f"/>
+  <path d="M44 43v12M38 49h12" fill="none" stroke="#d6a15f" stroke-width="1.5"/>
 </svg>

@@ -3,7 +3,8 @@
     <div class="offer-view-stack" aria-label="Ofertas de troca ativas">
         @foreach (var offer in Offers)
         {
-            <OfferViewPanel @key="offer.OfferId" Offer="offer" ViewerColor="@ViewerColor" />
+            <OfferViewPanel @key="offer.OfferId" Offer="offer" ViewerColor="@ViewerColor" ViewerPlayerId="@ViewerPlayerId"
+                            Players="@Players" OnAccept="@OnAccept" OnDecline="@OnDecline" OnExecute="@OnExecute" />
         }
     </div>
 }
@@ -14,4 +15,19 @@
 
     [Parameter]
     public string? ViewerColor { get; set; }
+
+    [Parameter]
+    public int ViewerPlayerId { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<GamePlayerStateResponse> Players { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<long> OnAccept { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnDecline { get; set; }
+
+    [Parameter]
+    public EventCallback<TradeOfferExecutionSelection> OnExecute { get; set; }
 }

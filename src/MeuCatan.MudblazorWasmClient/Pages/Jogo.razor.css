@@ -1,26 +1,40 @@
 .game-page-shell {
-    height: calc(100dvh - 3.5rem);
+    display: flex;
+    flex: 1 1 auto;
     min-height: 0;
 }
 
-.game-page-shell ::deep .game-page {
-    height: 100%;
+.game-page {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
     min-height: 0;
+    box-sizing: border-box;
 }
 
-.game-page-shell ::deep .game-layout {
-    height: 100%;
+.game-layout {
+    display: flex;
+    flex: 1 1 auto;
+    gap: 24px;
     min-height: 0;
-    flex-wrap: nowrap;
+    box-sizing: border-box;
 }
 
-.game-page-shell ::deep .game-board-column,
-.game-page-shell ::deep .game-sidebar-column {
+.game-board-column,
+.game-sidebar-column {
     min-height: 0;
     display: flex;
 }
 
-.game-page-shell ::deep .game-board-surface {
+.game-board-column {
+    flex: 2 1 0;
+}
+
+.game-sidebar-column {
+    flex: 1 1 0;
+}
+
+.game-board-surface {
     width: 100%;
     min-height: 0;
     display: flex;
@@ -42,6 +56,15 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    pointer-events: auto;
+}
+
+.game-board-overlay-turn-legend {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    width: min(320px, calc(100% - 32px));
+    z-index: 20;
     pointer-events: auto;
 }
 
@@ -73,6 +96,13 @@
     flex: 1 1 auto;
     min-width: 0;
     min-height: 94px;
+    --resource-card-shell-width: 72px;
+    --resource-card-shell-height: 88px;
+    --resource-card-layer-middle-transform: translate(3px, -3px);
+    --resource-card-layer-back-transform: translate(6px, -6px);
+    --resource-card-radius: 7px;
+    --resource-token-icon-width: 56px;
+    --resource-token-icon-height: 56px;
 }
 
 .game-development-cards-slot {
@@ -80,42 +110,24 @@
     width: 416px;
     min-width: 416px;
     min-height: 94px;
+    --resource-card-shell-width: 72px;
+    --resource-card-shell-height: 88px;
+    --resource-card-layer-middle-transform: translate(3px, -3px);
+    --resource-card-layer-back-transform: translate(6px, -6px);
+    --resource-card-radius: 7px;
+    --resource-token-icon-width: 56px;
+    --resource-token-icon-height: 56px;
 }
 
 .game-action-panel-slot {
     flex: 0 0 auto;
-}
-
-.game-resource-panel-slot ::deep .resource-card-shell,
-.game-development-cards-slot ::deep .resource-card-shell,
-.game-action-panel-slot ::deep .resource-card-shell {
-    width: 72px;
-    height: 88px;
-}
-
-.game-resource-panel-slot ::deep .layer-middle,
-.game-development-cards-slot ::deep .layer-middle,
-.game-action-panel-slot ::deep .layer-middle {
-    transform: translate(3px, -3px);
-}
-
-.game-resource-panel-slot ::deep .layer-back,
-.game-development-cards-slot ::deep .layer-back,
-.game-action-panel-slot ::deep .layer-back {
-    transform: translate(6px, -6px);
-}
-
-.game-resource-panel-slot ::deep .resource-card,
-.game-development-cards-slot ::deep .resource-card,
-.game-action-panel-slot ::deep .resource-card {
-    border-radius: 7px;
-}
-
-.game-resource-panel-slot ::deep .resource-card .resource-token-icon,
-.game-development-cards-slot ::deep .resource-card .resource-token-icon,
-.game-action-panel-slot ::deep .resource-card .resource-token-icon {
-    width: 56px;
-    height: 56px;
+    --resource-card-shell-width: 72px;
+    --resource-card-shell-height: 88px;
+    --resource-card-layer-middle-transform: translate(3px, -3px);
+    --resource-card-layer-back-transform: translate(6px, -6px);
+    --resource-card-radius: 7px;
+    --resource-token-icon-width: 56px;
+    --resource-token-icon-height: 56px;
 }
 
 .dice-action-button {
@@ -131,90 +143,72 @@
     flex: 0 0 auto;
 }
 
-.history-chat-list {
-    display: flex;
-    flex-direction: column-reverse;
-    gap: 4px;
-    height: 132px;
-    overflow-y: auto;
-    padding-right: 4px;
-}
-
-.history-chat-line {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    line-height: 1.2;
-}
-
-.history-dice-inline {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-}
-
-.history-chat-line {
-    flex-wrap: wrap;
-}
-
-.history-player-avatar {
-    width: 18px;
-    height: 18px;
-    font-size: 0.7rem;
-    flex-shrink: 0;
-}
-
-.history-resource-token {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    font-size: 24px;
-    margin-left: 1px;
-}
-
-.history-resource-token ::deep .resource-token-icon {
-    width: 100%;
-    height: 100%;
-}
-
-.history-caption {
-    font-size: 0.75rem;
-    opacity: 0.9;
-}
-
-.game-page-shell ::deep .game-sidebar-content {
+.game-sidebar-content {
     width: 100%;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     overflow-y: auto;
     padding-right: 4px;
+}
+
+.game-activity-panel {
+    padding-bottom: 10px;
+}
+
+.game-activity-divider {
+    width: 100%;
+    height: 0;
+    margin-left: 0;
+    margin-right: 0;
+    border-color: rgba(15, 23, 42, 0.12);
+}
+
+.game-player-status-list {
+    margin-top: 8px;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.game-player-status-item {
+    padding: 8px;
+}
+
+.game-player-status-item.is-current-turn {
+    border-radius: 5px;
+    background-color: rgba(224, 202, 5, 0.21);
+    transition: background-color 0.3s ease-in-out;
+}
+
+.game-player-status-item:last-child {
+    border-bottom: 0;
 }
 
 @media (max-width: 959.98px) {
     .game-page-shell {
         height: auto;
-        min-height: calc(100dvh - 4rem);
+        min-height: 100%;
     }
 
-    .game-page-shell ::deep .game-page,
-    .game-page-shell ::deep .game-layout {
+    .game-page,
+    .game-layout {
         height: auto;
     }
 
-    .game-page-shell ::deep .game-layout {
-        flex-wrap: wrap;
+    .game-layout {
+        flex-direction: column;
     }
 
-    .game-page-shell ::deep .game-board-column {
-        min-height: calc(100dvh - 4rem);
+    .game-board-column {
+        min-height: 0;
     }
 
-    .game-page-shell ::deep .game-board-surface {
-        min-height: calc(100dvh - 4rem);
+    .game-board-surface {
+        min-height: 0;
     }
 
-    .game-page-shell ::deep .game-sidebar-content {
+    .game-sidebar-content {
         max-height: none;
         overflow: visible;
     }
@@ -226,5 +220,11 @@
     .game-board-overlay-actions {
         right: 12px;
         bottom: 12px;
+    }
+
+    .game-board-overlay-turn-legend {
+        top: 12px;
+        left: 12px;
+        width: calc(100% - 24px);
     }
 }

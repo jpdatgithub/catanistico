@@ -1,4 +1,5 @@
-﻿Microsoft Visual Studio Solution File, Format Version 12.00
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -9,6 +10,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MeuCatan.MudblazorWasmClient", "src\MeuCatan.MudblazorWasmClient\MeuCatan.MudblazorWasmClient.csproj", "{16C0829D-50AD-4A9D-B34E-75DE1690247F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MeuCatan.Api", "src\MeuCatan.Api\MeuCatan.Api.csproj", "{8442D5AA-EDD9-4D7C-959F-F792D96067AF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".tmp-validation", ".tmp-validation", "{F0E13CDE-545C-39AB-A543-F99B3415EB6D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

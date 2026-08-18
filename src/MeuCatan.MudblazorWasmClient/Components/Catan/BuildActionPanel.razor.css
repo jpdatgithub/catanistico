@@ -61,11 +61,8 @@
     display: inline-flex;
     align-items: center;
     gap: 2px;
-}
-
-.build-cost-item ::deep .resource-token-icon {
-    width: 18px;
-    height: 18px;
+    --resource-token-icon-width: 18px;
+    --resource-token-icon-height: 18px;
 }
 
 .build-cost-qty {

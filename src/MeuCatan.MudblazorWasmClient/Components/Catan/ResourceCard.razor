@@ -1,39 +1,40 @@
-<button type="button"
-        class="resource-card-button @(Token ? "resource-card-button--token" : string.Empty) @(OnClick.HasDelegate ? "is-clickable" : string.Empty) @(Selected ? "is-selected" : string.Empty) @(Disabled && GrayscaleWhenDisabled ? "is-disabled-muted" : string.Empty)"
-        disabled="@Disabled" @onclick="HandleClick" title="@DisplayName" aria-label="@AccessibleLabel">
-    @if (Token)
-    {
-        <span class="resource-token @ResourceClass">
-            <ResourceTokenIcon ResourceType="@ResourceType" />
-            @if (Count > 0)
+<MudTooltip Text="@DisplayName" Inline="true">
+    <span style="display:inline-flex;">
+        <button type="button"
+                class="resource-card-button @(Token ? "resource-card-button--token" : string.Empty) @(OnClick.HasDelegate ? "is-clickable" : string.Empty) @(Selected ? "is-selected" : string.Empty) @(Disabled && GrayscaleWhenDisabled ? "is-disabled-muted" : string.Empty)"
+                disabled="@Disabled" @onclick="HandleClick" aria-label="@AccessibleLabel">
+            @if (Token)
             {
-                <span class="resource-token-count">@Count</span>
+                <span class="resource-token @ResourceClass">
+                    <ResourceTokenIcon ResourceType="@ResourceType" ShowTooltip="false" />
+                    <ResourceQuantityBadge Count="@Count" />
+                </span>
             }
-        </span>
-    }
-    else
-    {
-        <div class="resource-card-shell @(Compact ? "resource-card-shell--compact" : string.Empty)">
-            @if (Count > 2)
+            else
             {
-                <div class="resource-card-layer @ResourceClass layer-back"></div>
-            }
+                <div class="resource-card-shell @(Compact ? "resource-card-shell--compact" : string.Empty)">
+                    @if (Count > 2)
+                    {
+                        <div class="resource-card-layer @ResourceClass layer-back"></div>
+                    }
 
-            @if (Count > 1)
-            {
-                <div class="resource-card-layer @ResourceClass layer-middle"></div>
-            }
+                    @if (Count > 1)
+                    {
+                        <div class="resource-card-layer @ResourceClass layer-middle"></div>
+                    }
 
-            <div class="resource-card @ResourceClass @(Compact ? "resource-card--compact" : string.Empty)">
-                <ResourceTokenIcon ResourceType="@ResourceType" />
-                @if (Count > 0)
-                {
-                    <span class="resource-card-count">@Count</span>
-                }
-            </div>
-        </div>
-    }
-</button>
+                    <div class="resource-card @ResourceClass @(Compact ? "resource-card--compact" : string.Empty)">
+                        <ResourceTokenIcon ResourceType="@ResourceType" ShowTooltip="false" />
+                        @if (Count > 0)
+                        {
+                            <span class="resource-card-count">@Count</span>
+                        }
+                    </div>
+                </div>
+            }
+        </button>
+    </span>
+</MudTooltip>
 
 @code {
     [Parameter, EditorRequired]
@@ -67,6 +68,7 @@
         "ovelha" => "resource-ovelha",
         "trigo" => "resource-trigo",
         "pedra" => "resource-pedra",
+        "coringa" => "resource-coringa",
         "cavaleiro" => "resource-cavaleiro",
         "ponto-de-vitoria" => "resource-ponto-de-vitoria",
         "roadbuilder" => "resource-roadbuilder",
@@ -82,6 +84,7 @@
         "ovelha" => "Ovelha",
         "trigo" => "Trigo",
         "pedra" => "Pedra",
+        "coringa" => "Coringa",
         "cavaleiro" => "Cavaleiro",
         "ponto-de-vitoria" => "Ponto de vitoria",
         "roadbuilder" => "Construtor de estradas",

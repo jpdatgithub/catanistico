@@ -3,48 +3,40 @@
 @inject HttpClient Http
 @using Microsoft.AspNetCore.SignalR.Client
 
-<MudPaper Class="pa-4">
-    <MudText Typo="Typo.h6">Chat da Partida</MudText>
+@if (!string.IsNullOrWhiteSpace(_chatErro))
+{
+    <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@_chatErro</MudAlert>
+}
 
-    @if (!string.IsNullOrWhiteSpace(_chatErro))
+<MudPaper Outlined="true" Class="pa-2 mb-2" Style="height: 144px; overflow-y: auto;">
+    @if (_chatMessages.Count == 0)
     {
-        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@_chatErro</MudAlert>
+        <MudText Typo="Typo.caption">Nenhuma mensagem ainda.</MudText>
     }
-
-    <MudPaper Outlined="true" Class="pa-2 mb-2" Style="height: 144px; overflow-y: auto;">
-        @if (_chatMessages.Count == 0)
+    else
+    {
+        @foreach (var message in _chatMessages)
         {
-            <MudText Typo="Typo.caption">Nenhuma mensagem ainda.</MudText>
+            <MudStack Spacing="0" Class="mb-1">
+                <MudText Typo="Typo.caption">
+                    <strong>@message.UsuarioNome</strong>
+                    (@message.EnviadaEmUtc.ToLocalTime().ToString("HH:mm"))
+                </MudText>
+                <MudText Typo="Typo.body2">@message.Mensagem</MudText>
+            </MudStack>
         }
-        else
-        {
-            @foreach (var message in _chatMessages)
-            {
-                <MudStack Spacing="0" Class="mb-1">
-                    <MudText Typo="Typo.caption">
-                        <strong>@message.UsuarioNome</strong>
-                        (@message.EnviadaEmUtc.ToLocalTime().ToString("HH:mm"))
-                    </MudText>
-                    <MudText Typo="Typo.body2">@message.Mensagem</MudText>
-                </MudStack>
-            }
-        }
-    </MudPaper>
-
-    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-        <MudTextField Label="Mensagem" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
-                      Class="flex-grow-1" @bind-Value="_chatInput" OnKeyDown="OnChatKeyDown" />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                   Disabled="@(_chatHubConnection is null || _chatHubConnection.State != HubConnectionState.Connected || _enviandoChat)"
-                   OnClick="EnviarMensagemChatAsync">
-            @(_enviandoChat ? "..." : "Enviar")
-        </MudButton>
-    </MudStack>
-
-    <MudText Typo="Typo.caption" Class="mt-1">
-        Status: @(_chatHubConnection?.State.ToString() ?? "Desconectado")
-    </MudText>
+    }
 </MudPaper>
+
+<MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+    <MudTextField Label="Mensagem" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Class="flex-grow-1"
+                  @bind-Value="_chatInput" OnKeyDown="OnChatKeyDown" />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               Disabled="@(_chatHubConnection is null || _chatHubConnection.State != HubConnectionState.Connected || _enviandoChat)"
+               OnClick="EnviarMensagemChatAsync">
+        @(_enviandoChat ? "..." : "Enviar")
+    </MudButton>
+</MudStack>
 
 @code {
     [Parameter]

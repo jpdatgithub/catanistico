@@ -1,0 +1,91 @@
+@using MeuCatan.ClassLib.Contracts
+@using MeuCatan.MudblazorWasmClient.Components.Catan
+
+<div class="player-status-item">
+    <MudTooltip Text="@Player.Nome">
+        <MudAvatar Class="player-status-avatar" Size="Size.Small" Style="@($"background-color: {PlayerColorHex};")">
+            @PlayerInitial
+        </MudAvatar>
+    </MudTooltip>
+
+    <div class="player-status-metric" aria-label="Pontos de vitoria">
+        <span class="player-status-token">
+            <ResourceTokenIcon ResourceType="ponto-de-vitoria" />
+        </span>
+        <MudText Typo="Typo.caption" Class="player-status-value">@Player.Pontos</MudText>
+    </div>
+
+    <div class="player-status-metric" aria-label="Recursos na mao">
+        <span class="player-status-token">
+            <ResourceTokenIcon ResourceType="coringa" />
+        </span>
+        <MudText Typo="Typo.caption" Class="player-status-value">@TotalResources</MudText>
+    </div>
+
+    <div class="player-status-metric" aria-label="Cartas de desenvolvimento na mao">
+        <span class="player-status-token">
+            <ResourceTokenIcon ResourceType="desenvolvimento" />
+        </span>
+        <MudText Typo="Typo.caption" Class="player-status-value">@DevelopmentCardsInHand</MudText>
+    </div>
+
+    <div class="player-status-metric" aria-label="Cavaleiros utilizados">
+        <span class="player-status-token">
+            <ResourceTokenIcon ResourceType="cavaleiro" />
+        </span>
+        <MudText Typo="Typo.caption" Class="player-status-value">@Player.UsedKnightsCount</MudText>
+    </div>
+
+    <div class="player-status-metric" aria-label="Maior estrada continua">
+        <span class="player-status-token">
+            <ResourceTokenIcon ResourceType="roadbuilder" />
+        </span>
+        <MudText Typo="Typo.caption" Class="player-status-value">@Player.MaiorEstradaContinua</MudText>
+    </div>
+
+    @if (Player.HasLargestArmy || Player.HasLongestRoad)
+    {
+        <div class="player-status-awards">
+            <span class="player-status-divider" aria-hidden="true"></span>
+
+            @if (Player.HasLargestArmy)
+            {
+                <MudTooltip Text="Maior cavalaria" Inline="true"
+                            RootStyle="display: inline-flex; align-items: center; line-height: 0;">
+                    <span class="player-status-award-tooltip" aria-label="Maior cavalaria">
+                        <span class="player-status-token player-status-award-token">
+                            <ResourceTokenIcon ResourceType="cavaleiro" />
+                        </span>
+                    </span>
+                </MudTooltip>
+            }
+
+            @if (Player.HasLongestRoad)
+            {
+                <MudTooltip Text="Maior estrada" Inline="true"
+                            RootStyle="display: inline-flex; align-items: center; line-height: 0;">
+                    <span class="player-status-award-tooltip" aria-label="Maior estrada">
+                        <span class="player-status-token player-status-award-token">
+                            <ResourceTokenIcon ResourceType="roadbuilder" />
+                        </span>
+                    </span>
+                </MudTooltip>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public GamePlayerStateResponse Player { get; set; } = default!;
+
+    private int TotalResources => Player.Resources?.Values.Sum() ?? 0;
+
+    private int DevelopmentCardsInHand => Math.Max(0, Player.HiddenDevelopmentCardCount);
+
+    private string PlayerColorHex => PlayerColorUtils.ToHex(Player.Cor);
+
+    private string PlayerInitial => string.IsNullOrWhiteSpace(Player.Nome)
+        ? "?"
+        : Player.Nome.Trim()[0].ToString().ToUpperInvariant();
+}

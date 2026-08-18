@@ -1,0 +1,44 @@
+.development-resource-selection-overlay {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    z-index: 36;
+    pointer-events: auto;
+}
+
+.development-resource-selection-panel {
+    min-width: 280px;
+    border: 1px solid rgba(15, 23, 42, 0.16);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.development-resource-options,
+.development-resource-selection {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.development-resource-selection {
+    min-height: 40px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+@media (max-width: 960px) {
+    .development-resource-selection-overlay {
+        left: 12px;
+        bottom: 12px;
+        width: calc(100% - 24px);
+    }
+
+    .development-resource-options,
+    .development-resource-selection {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+}

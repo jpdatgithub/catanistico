@@ -1,0 +1,22 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Coringa">
+  <defs>
+    <linearGradient id="wildcardFill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f5e8ff" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+    <linearGradient id="wildcardRing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fdf4ff" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+  </defs>
+
+  <circle cx="32" cy="32" r="27" fill="url(#wildcardRing)" opacity="0.18" />
+  <circle cx="32" cy="32" r="24" fill="url(#wildcardFill)" stroke="#5b21b6" stroke-width="2.5" />
+  <path d="M24 25.5c0-4.6 3.8-8.3 8.5-8.3 4.8 0 8.7 3.4 8.7 8.1 0 4.8-2.8 7.1-6.1 9.3-2.4 1.6-3.8 2.9-3.8 5.7"
+        fill="none"
+        stroke="#5b21b6"
+        stroke-width="4.4"
+        stroke-linecap="round"
+        stroke-linejoin="round" />
+  <circle cx="31.3" cy="45.9" r="2.8" fill="#5b21b6" />
+</svg>

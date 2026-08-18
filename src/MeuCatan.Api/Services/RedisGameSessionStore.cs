@@ -20,7 +20,7 @@ public sealed class RedisGameSessionStore : IGameSessionStore
     {
         using var lockHandle = RedisStoreLockHandle.Acquire(_database, RedisStateStoreKeys.GameWriteLock);
 
-        return mutation(new GameSessionStoreWriteContext(GetSessionOrDefault, SaveSession));
+        return mutation(new GameSessionStoreWriteContext(GetSessionOrDefault, SaveSession, RemoveSession));
     }
 
     private CatanGameSessionState? GetSessionOrDefault(int salaId)
@@ -32,5 +32,10 @@ public sealed class RedisGameSessionStore : IGameSessionStore
     private void SaveSession(CatanGameSessionState session)
     {
         _database.StringSet(RedisStateStoreKeys.GameSession(session.SalaId), RedisStateStoreSerializer.Serialize(session));
+    }
+
+    private bool RemoveSession(int salaId)
+    {
+        return _database.KeyDelete(RedisStateStoreKeys.GameSession(salaId));
     }
 }
