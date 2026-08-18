@@ -276,6 +276,40 @@ namespace MeuCatan.MudblazorWasmClient.Services
                 : (true, data, null);
         }
 
+        public async Task<(bool Success, LobbyDetalheSalaResponse? Data, string? ErrorMessage)> AtualizarTimerOptionsAsync(
+            int salaId,
+            CatanTimerOptions timerOptions)
+        {
+            using var request = await CreateAuthenticatedRequestAsync(
+                HttpMethod.Post,
+                $"api/lobby/salas/{salaId}/timers",
+                new LobbyAtualizarTimerOptionsRequest
+                {
+                    InitialSettlementSeconds = timerOptions.InitialSettlementSeconds,
+                    InitialRoadSeconds = timerOptions.InitialRoadSeconds,
+                    TurnSeconds = timerOptions.TurnSeconds,
+                    DiscardSeconds = timerOptions.DiscardSeconds,
+                    RobberPlacementSeconds = timerOptions.RobberPlacementSeconds,
+                    TradeBonusSeconds = timerOptions.TradeBonusSeconds
+                });
+
+            if (request is null)
+            {
+                return (false, null, "Sessão inválida.");
+            }
+
+            using var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return (false, null, await ReadErrorAsync(response, "Não foi possível atualizar os timers."));
+            }
+
+            var data = await response.Content.ReadFromJsonAsync<LobbyDetalheSalaResponse>();
+            return data is null
+                ? (false, null, "Resposta inválida ao atualizar os timers.")
+                : (true, data, null);
+        }
+
         public async Task<(bool Success, LobbyDetalheSalaResponse? Data, string? ErrorMessage)> EnviarHeartbeatSalaAsync(int salaId, bool inLobby = false)
         {
             var heartbeatUrl = inLobby

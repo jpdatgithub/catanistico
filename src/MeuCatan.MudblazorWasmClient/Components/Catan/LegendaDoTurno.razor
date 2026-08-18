@@ -1,15 +1,55 @@
 @using MeuCatan.ClassLib.Contracts
 @using Microsoft.AspNetCore.Components
+@implements IAsyncDisposable
 
 <div Class="turn-legend-balloon pa-3" Elevation="0">
-    <MudText Typo="Typo.body2">@Legenda</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2">
+        <MudText Typo="Typo.body2">@Legenda</MudText>
+        @if (Session.TimerExpiresAtUtc is not null)
+        {
+            <MudText Typo="Typo.subtitle2">@TempoRestante</MudText>
+        }
+    </MudStack>
 </div>
 
 @code {
     [Parameter, EditorRequired]
     public GameSessionResponse Session { get; set; } = default!;
 
+    private CancellationTokenSource? _countdownCancellation;
+    private Task? _countdownTask;
+
     private string Legenda => GerarLegenda();
+    private string TempoRestante
+    {
+        get
+        {
+            var remaining = Session.TimerExpiresAtUtc - DateTime.UtcNow;
+            var totalSeconds = Math.Max(0, (int)Math.Ceiling(remaining?.TotalSeconds ?? 0));
+            return $"{totalSeconds / 60:00}:{totalSeconds % 60:00}";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _countdownCancellation = new CancellationTokenSource();
+        _countdownTask = RefreshCountdownAsync(_countdownCancellation.Token);
+    }
+
+    private async Task RefreshCountdownAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
 
     private string GerarLegenda()
     {
@@ -40,6 +80,13 @@
             return $"{currentPlayerNome} está movendo o ladrão...";
         }
 
+        if (Session.Phase == GameTipoFase.SetupInicial)
+        {
+            return Session.CatanState?.AwaitingInitialRoadPlacement == true
+                ? $"{currentPlayerNome} está posicionando a estrada inicial..."
+                : $"{currentPlayerNome} está posicionando a aldeia inicial...";
+        }
+
         if (Session.Phase == GameTipoFase.Turno
             && Session.CatanState?.HasRolledDiceThisTurn == false)
         {
@@ -47,5 +94,19 @@
         }
 
         return $"Vez de {currentPlayerNome}.";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_countdownCancellation is not null)
+        {
+            await _countdownCancellation.CancelAsync();
+            _countdownCancellation.Dispose();
+        }
+
+        if (_countdownTask is not null)
+        {
+            await _countdownTask;
+        }
     }
 }

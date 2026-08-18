@@ -19,6 +19,17 @@ public enum LobbyFaseSala
     Ended = 3
 }
 
+public class CatanTimerOptions
+{
+    public int DiceRollSeconds { get; set; } = 5;
+    public int InitialSettlementSeconds { get; set; } = 90;
+    public int InitialRoadSeconds { get; set; } = 30;
+    public int TurnSeconds { get; set; } = 90;
+    public int DiscardSeconds { get; set; } = 90;
+    public int RobberPlacementSeconds { get; set; } = 30;
+    public int TradeBonusSeconds { get; set; } = 15;
+}
+
 public class LobbyJogosDisponiveisResponse
 {
     public List<LobbyJogoDisponivelResponse> Jogos { get; set; } = [];
@@ -100,6 +111,7 @@ public class LobbyDetalheSalaResponse
     public bool AllPlayersReady { get; set; }
     public int MinJogadores { get; set; }
     public DateTime? GameStartedAtUtc { get; set; }
+    public CatanTimerOptions TimerOptions { get; set; } = new();
     public List<LobbyJogadorResponse> Jogadores { get; set; } = [];
 }
 
@@ -124,6 +136,16 @@ public class LobbySairSalaResponse
 public class LobbySelecionarJogoRequest
 {
     public string GameType { get; set; } = LobbyTipoJogo.CatanBase;
+}
+
+public class LobbyAtualizarTimerOptionsRequest
+{
+    public int InitialSettlementSeconds { get; set; } = 90;
+    public int InitialRoadSeconds { get; set; } = 30;
+    public int TurnSeconds { get; set; } = 90;
+    public int DiscardSeconds { get; set; } = 90;
+    public int RobberPlacementSeconds { get; set; } = 30;
+    public int TradeBonusSeconds { get; set; } = 15;
 }
 
 public class LobbyAlterarProntoRequest

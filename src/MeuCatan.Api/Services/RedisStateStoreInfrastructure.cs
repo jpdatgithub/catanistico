@@ -29,6 +29,7 @@ internal static class RedisStateStoreKeys
     public const string LobbyNextRoomId = "meucatan:lobby:next-room-id";
     public const string LobbyWriteLock = "meucatan:locks:lobby-room-store";
     public const string GameWriteLock = "meucatan:locks:game-session-store";
+    public const string GameSessionIds = "meucatan:game:session-ids";
 
     public static string LobbyRoom(int salaId) => $"meucatan:lobby:room:{salaId}";
     public static string GameSession(int salaId) => $"meucatan:game:session:{salaId}";

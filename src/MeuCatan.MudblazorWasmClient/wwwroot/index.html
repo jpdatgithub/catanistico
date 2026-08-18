@@ -35,6 +35,62 @@
             const r = el.getBoundingClientRect();
             return { width: r.width, height: r.height };
         };
+
+        window.audioCues = (() => {
+            const audioByCue = new Map();
+            const sources = {
+                "sua-vez": "audio/sua-vez.mp3",
+                "dados-rolados": "audio/dados-rolando.mp3",
+                "troca-proposta": "audio/troca-proposta.mp3",
+                "ladrao": "audio/ladrao.mp3"
+            };
+
+            function getAudio(cueName) {
+                let audio = audioByCue.get(cueName);
+                if (!audio) {
+                    audio = new Audio(sources[cueName]);
+                    audio.preload = "auto";
+                    audioByCue.set(cueName, audio);
+                }
+
+                return audio;
+            }
+
+            function unlock() {
+                for (const cueName of Object.keys(sources)) {
+                    const audio = getAudio(cueName);
+                    audio.muted = true;
+                    void audio.play().then(() => {
+                        if (!audio.muted) {
+                            return;
+                        }
+
+                        audio.pause();
+                        audio.currentTime = 0;
+                        audio.muted = false;
+                    }).catch(() => {
+                        audio.muted = false;
+                    });
+                }
+            }
+
+            function play(cueName) {
+                const source = sources[cueName];
+                if (!source) {
+                    return;
+                }
+
+                const audio = getAudio(cueName);
+
+                audio.muted = false;
+                audio.pause();
+                audio.currentTime = 0;
+                void audio.play().catch(() => { });
+            }
+
+            document.addEventListener("pointerdown", unlock, { once: true });
+            return { play };
+        })();
     </script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>

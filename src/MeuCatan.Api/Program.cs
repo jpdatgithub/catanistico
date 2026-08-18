@@ -36,6 +36,7 @@ builder.Services.AddSingleton<IGameChatService, InMemoryGameChatService>();
 builder.Services.AddSingleton<IGameStateEventPublisher, SignalRGameStateEventPublisher>();
 builder.Services.AddSingleton<ILobbyRoomService, LobbyRoomService>();
 builder.Services.AddHostedService<LobbyPresenceMaintenanceHostedService>();
+builder.Services.AddHostedService<GameTimerHostedService>();
 builder.Services.AddSignalR();
 
 var jwtKey = builder.Configuration["Jwt:Key"]

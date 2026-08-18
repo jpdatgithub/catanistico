@@ -121,10 +121,81 @@
 
                             @if (_sala.GameType == LobbyTipoJogo.CatanBase)
                             {
-                                <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
-                                    Catan base está configurado para 3 a 4 jogadores e ainda não possui opções adicionais neste
-                                    corte.
-                                </MudAlert>
+                                <MudDivider Class="my-4" />
+                                <MudButton Variant="Variant.Text" Color="Color.Inherit" FullWidth="true"
+                                           EndIcon="@(_timersExpandidos ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                           OnClick="AlternarTimersExpandidos">
+                                    Timers da partida
+                                </MudButton>
+
+                                @if (_timersExpandidos)
+                                {
+                                    <MudGrid Spacing="2" Class="mt-1">
+                                        <MudItem xs="6">
+                                            <MudSelect T="int" Label="Aldeia inicial"
+                                                       Value="@_timerOptions.InitialSettlementSeconds"
+                                                       ValueChanged="AtualizarTimerAldeiaInicialAsync" Variant="Variant.Outlined"
+                                                       Disabled="@(!PodeEditarTimers)">
+                                                @foreach (var seconds in TurnTimerOptions)
+                                                {
+                                                    <MudSelectItem T="int" Value="@seconds">@seconds s</MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudSelect T="int" Label="Estrada inicial" Value="@_timerOptions.InitialRoadSeconds"
+                                                       ValueChanged="AtualizarTimerEstradaInicialAsync" Variant="Variant.Outlined"
+                                                       Disabled="@(!PodeEditarTimers)">
+                                                @foreach (var seconds in InitialRoadTimerOptions)
+                                                {
+                                                    <MudSelectItem T="int" Value="@seconds">@seconds s</MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudSelect T="int" Label="Turno" Value="@_timerOptions.TurnSeconds"
+                                                       ValueChanged="AtualizarTimerTurnoAsync" Variant="Variant.Outlined"
+                                                       Disabled="@(!PodeEditarTimers)">
+                                                @foreach (var seconds in TurnTimerOptions)
+                                                {
+                                                    <MudSelectItem T="int" Value="@seconds">@seconds s</MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudSelect T="int" Label="Descarte" Value="@_timerOptions.DiscardSeconds"
+                                                       ValueChanged="AtualizarTimerDescarteAsync" Variant="Variant.Outlined"
+                                                       Disabled="@(!PodeEditarTimers)">
+                                                @foreach (var seconds in TurnTimerOptions)
+                                                {
+                                                    <MudSelectItem T="int" Value="@seconds">@seconds s</MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudSelect T="int" Label="Posicionar ladrão"
+                                                       Value="@_timerOptions.RobberPlacementSeconds"
+                                                       ValueChanged="AtualizarTimerLadraoAsync" Variant="Variant.Outlined"
+                                                       Disabled="@(!PodeEditarTimers)">
+                                                @foreach (var seconds in RobberTimerOptions)
+                                                {
+                                                    <MudSelectItem T="int" Value="@seconds">@seconds s</MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudSelect T="int" Label="Adicional por troca" Value="@_timerOptions.TradeBonusSeconds"
+                                                       ValueChanged="AtualizarBonusTrocaAsync" Variant="Variant.Outlined"
+                                                       Disabled="@(!PodeEditarTimers)">
+                                                @foreach (var seconds in TradeBonusOptions)
+                                                {
+                                                    <MudSelectItem T="int" Value="@seconds">@seconds s</MudSelectItem>
+                                                }
+                                            </MudSelect>
+                                        </MudItem>
+                                    </MudGrid>
+
+                                }
                             }
                         </MudPaper>
 
@@ -179,7 +250,15 @@
     private CancellationTokenSource? _pollingCancellation;
     private Task? _pollingTask;
     private DateTime _ultimoHeartbeatUtc = DateTime.MinValue;
+    private CatanTimerOptions _timerOptions = new();
+    private bool _timersExpandidos;
+    private static readonly int[] TurnTimerOptions = [60, 90, 120];
+    private static readonly int[] RobberTimerOptions = [30, 60];
+    private static readonly int[] InitialRoadTimerOptions = [15, 30, 45];
+    private static readonly int[] TradeBonusOptions = [0, 5, 10, 15, 20];
     private const string AutoRedirectStoragePrefix = "meucatan:room-game-redirect:";
+    private bool PodeEditarTimers => _sala?.CurrentUserIsCreator == true
+        && _sala.Fase is LobbyFaseSala.Lobby or LobbyFaseSala.Setup;
 
     protected override async Task OnInitializedAsync()
     {
@@ -289,6 +368,66 @@
         }
 
         _sala = result.Data;
+    }
+
+    private async Task AtualizarTimerTurnoAsync(int seconds)
+    {
+        _timerOptions.TurnSeconds = seconds;
+        await SalvarTimersAsync();
+    }
+
+    private async Task AtualizarTimerAldeiaInicialAsync(int seconds)
+    {
+        _timerOptions.InitialSettlementSeconds = seconds;
+        await SalvarTimersAsync();
+    }
+
+    private async Task AtualizarTimerEstradaInicialAsync(int seconds)
+    {
+        _timerOptions.InitialRoadSeconds = seconds;
+        await SalvarTimersAsync();
+    }
+
+    private async Task AtualizarTimerDescarteAsync(int seconds)
+    {
+        _timerOptions.DiscardSeconds = seconds;
+        await SalvarTimersAsync();
+    }
+
+    private async Task AtualizarTimerLadraoAsync(int seconds)
+    {
+        _timerOptions.RobberPlacementSeconds = seconds;
+        await SalvarTimersAsync();
+    }
+
+    private async Task AtualizarBonusTrocaAsync(int seconds)
+    {
+        _timerOptions.TradeBonusSeconds = seconds;
+        await SalvarTimersAsync();
+    }
+
+    private async Task SalvarTimersAsync()
+    {
+        _erro = null;
+        _mensagem = null;
+        _acaoEmAndamento = true;
+
+        var result = await AuthService.AtualizarTimerOptionsAsync(SalaId, _timerOptions);
+        _acaoEmAndamento = false;
+
+        if (!result.Success || result.Data is null)
+        {
+            _erro = result.ErrorMessage;
+            return;
+        }
+
+        await ProcessarSalaCarregadaAsync(result.Data);
+        _mensagem = "Timers da partida atualizados. O status de pronto foi reiniciado para os demais jogadores.";
+    }
+
+    private void AlternarTimersExpandidos()
+    {
+        _timersExpandidos = !_timersExpandidos;
     }
 
     private async Task IniciarJogoAsync()
@@ -412,6 +551,16 @@ DateTime.UtcNow);
         }
 
         _sala = sala;
+        _timerOptions = new CatanTimerOptions
+        {
+            DiceRollSeconds = sala.TimerOptions.DiceRollSeconds,
+            InitialSettlementSeconds = sala.TimerOptions.InitialSettlementSeconds,
+            InitialRoadSeconds = sala.TimerOptions.InitialRoadSeconds,
+            TurnSeconds = sala.TimerOptions.TurnSeconds,
+            DiscardSeconds = sala.TimerOptions.DiscardSeconds,
+            RobberPlacementSeconds = sala.TimerOptions.RobberPlacementSeconds,
+            TradeBonusSeconds = sala.TimerOptions.TradeBonusSeconds
+        };
     }
 
     private async Task<bool> PodeRedirecionarParaJogoAsync(LobbyDetalheSalaResponse sala)

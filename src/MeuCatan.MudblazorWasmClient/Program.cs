@@ -13,6 +13,7 @@ builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<ClienteAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<ClienteAuthStateProvider>());
 builder.Services.AddScoped<ClienteAuthService>();
+builder.Services.AddScoped<AudioCueService>();
 builder.Services.AddMudServices();
 
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"];

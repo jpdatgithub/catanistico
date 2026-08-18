@@ -109,6 +109,19 @@ public class LobbyController : ControllerBase
         return ToActionResult(result);
     }
 
+    [HttpPost("salas/{salaId:int}/timers")]
+    public IActionResult AtualizarTimers([FromRoute] int salaId, [FromBody] LobbyAtualizarTimerOptionsRequest request)
+    {
+        var userContext = GetUserContext();
+        if (userContext is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = _lobbyRoomService.AtualizarTimerOptions(salaId, userContext.UsuarioId, request);
+        return ToActionResult(result);
+    }
+
     [HttpPost("salas/{salaId:int}/pronto")]
     public IActionResult AlterarPronto([FromRoute] int salaId, [FromBody] LobbyAlterarProntoRequest request)
     {

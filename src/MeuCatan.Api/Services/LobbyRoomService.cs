@@ -11,6 +11,7 @@ public interface ILobbyRoomService
     LobbyOperationResult<LobbyDetalheSalaResponse> EntrarSala(int salaId, int usuarioId, string usuarioNome, bool isGuest, string? codigoPrivado);
     LobbyOperationResult<LobbySairSalaResponse> SairSala(int salaId, int usuarioId);
     LobbyOperationResult<LobbyDetalheSalaResponse> SelecionarJogo(int salaId, int usuarioId, LobbySelecionarJogoRequest request);
+    LobbyOperationResult<LobbyDetalheSalaResponse> AtualizarTimerOptions(int salaId, int usuarioId, LobbyAtualizarTimerOptionsRequest request);
     LobbyOperationResult<LobbyDetalheSalaResponse> AlterarPronto(int salaId, int usuarioId, bool isReady);
     LobbyOperationResult<LobbyIniciarJogoResponse> IniciarJogo(int salaId, int usuarioId);
     LobbyOperationResult<LobbyDetalheSalaResponse> UpdatePlayerPresence(int salaId, int usuarioId, bool inLobby);
@@ -518,6 +519,68 @@ public sealed class LobbyRoomService : ILobbyRoomService
         });
     }
 
+    public LobbyOperationResult<LobbyDetalheSalaResponse> AtualizarTimerOptions(
+        int salaId,
+        int usuarioId,
+        LobbyAtualizarTimerOptionsRequest request)
+    {
+        if (request is null)
+        {
+            return LobbyOperationResult<LobbyDetalheSalaResponse>.Validation("As opções de timer são obrigatórias.");
+        }
+
+        var optionsError = ValidateTimerOptions(request);
+        if (optionsError is not null)
+        {
+            return LobbyOperationResult<LobbyDetalheSalaResponse>.Validation(optionsError);
+        }
+
+        return _roomStore.Write(store =>
+        {
+            var sala = store.GetRoomOrDefault(salaId);
+            if (sala is null)
+            {
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.NotFound("Sala não encontrada.");
+            }
+
+            if (sala.CriadorId != usuarioId)
+            {
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.Forbidden("Somente o criador da sala pode alterar os timers.");
+            }
+
+            if (sala.Fase is LobbyFaseSala.InGame or LobbyFaseSala.Ended)
+            {
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.Conflict("Os timers não podem ser alterados após o início do jogo.");
+            }
+
+            if (sala.TimerOptions.TurnSeconds == request.TurnSeconds
+                && sala.TimerOptions.DiscardSeconds == request.DiscardSeconds
+                && sala.TimerOptions.RobberPlacementSeconds == request.RobberPlacementSeconds
+                && sala.TimerOptions.TradeBonusSeconds == request.TradeBonusSeconds
+                && sala.TimerOptions.InitialSettlementSeconds == request.InitialSettlementSeconds
+                && sala.TimerOptions.InitialRoadSeconds == request.InitialRoadSeconds)
+            {
+                return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
+            }
+
+            sala.TimerOptions = new CatanTimerOptions
+            {
+                DiceRollSeconds = 5,
+                InitialSettlementSeconds = request.InitialSettlementSeconds,
+                InitialRoadSeconds = request.InitialRoadSeconds,
+                TurnSeconds = request.TurnSeconds,
+                DiscardSeconds = request.DiscardSeconds,
+                RobberPlacementSeconds = request.RobberPlacementSeconds,
+                TradeBonusSeconds = request.TradeBonusSeconds
+            };
+            ResetarProntosNaoCriador(sala);
+            store.Save(sala);
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(sala.SalaId, "timer-options-changed");
+
+            return LobbyOperationResult<LobbyDetalheSalaResponse>.Ok(ToDetalheResponse(sala, usuarioId));
+        });
+    }
+
     public LobbyOperationResult<LobbyIniciarJogoResponse> IniciarJogo(int salaId, int usuarioId)
     {
         return _roomStore.Write(store =>
@@ -568,6 +631,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
                 SalaId = sala.SalaId,
                 GameType = sala.GameType,
                 CriadorId = sala.CriadorId,
+                TimerOptions = CloneTimerOptions(sala.TimerOptions),
                 Players = sala.Jogadores.Values
                     .OrderBy(j => j.EntrouEmUtc)
                     .Select(j => new RoomGameStartPlayer
@@ -666,6 +730,7 @@ public sealed class LobbyRoomService : ILobbyRoomService
             GameDisplayName = sala.GameDisplayName,
             Fase = sala.Fase,
             GameStartedAtUtc = sala.GameStartedAtUtc,
+            TimerOptions = CloneTimerOptions(sala.TimerOptions),
             CurrentUserIsInRoom = currentUserIsInRoom,
             CurrentUserIsCreator = currentUserIsCreator,
             CurrentUserIsReady = currentUser?.IsReady ?? false,
@@ -695,6 +760,32 @@ public sealed class LobbyRoomService : ILobbyRoomService
                     };
                 })
                 .ToList()
+        };
+    }
+
+    private static string? ValidateTimerOptions(LobbyAtualizarTimerOptionsRequest request)
+    {
+        return request.TurnSeconds is not (60 or 90 or 120)
+            || request.InitialSettlementSeconds is not (60 or 90 or 120)
+            || request.InitialRoadSeconds is not (15 or 30 or 45)
+            || request.DiscardSeconds is not (60 or 90 or 120)
+            || request.RobberPlacementSeconds is not (30 or 60)
+            || request.TradeBonusSeconds is not (0 or 5 or 10 or 15 or 20)
+                ? "Uma ou mais opções de timer são inválidas."
+                : null;
+    }
+
+    private static CatanTimerOptions CloneTimerOptions(CatanTimerOptions options)
+    {
+        return new CatanTimerOptions
+        {
+            DiceRollSeconds = 5,
+            InitialSettlementSeconds = options.InitialSettlementSeconds,
+            InitialRoadSeconds = options.InitialRoadSeconds,
+            TurnSeconds = options.TurnSeconds,
+            DiscardSeconds = options.DiscardSeconds,
+            RobberPlacementSeconds = options.RobberPlacementSeconds,
+            TradeBonusSeconds = options.TradeBonusSeconds
         };
     }
 

@@ -9,6 +9,10 @@ public sealed class CatanGameSessionState
     public string GameType { get; set; } = LobbyTipoJogo.CatanBase;
     public GameTipoFase Phase { get; set; } = GameTipoFase.SetupInicial;
     public int CurrentPlayerId { get; set; }
+    public CatanTimerOptions TimerOptions { get; set; } = new();
+    public string? TimerPhase { get; set; }
+    public DateTime? TimerExpiresAtUtc { get; set; }
+    public int? PausedTurnRemainingSeconds { get; set; }
     public int SetupStepIndex { get; set; }
     public List<int> SetupTurnOrder { get; set; } = [];
     public int? LastPlacedSettlementVertexId { get; set; }

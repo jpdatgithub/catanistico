@@ -32,6 +32,16 @@ public static class GameActionTypes
     public const string ChooseRobberVictim = "choose-robber-victim";
 }
 
+public static class GameTimerPhases
+{
+    public const string InitialSettlement = "initial-settlement";
+    public const string InitialRoad = "initial-road";
+    public const string DiceRoll = "dice-roll";
+    public const string Turn = "turn";
+    public const string Discard = "discard";
+    public const string Robber = "robber";
+}
+
 public static class DevelopmentCardTypes
 {
     public const string Knight = "cavaleiro";
@@ -51,6 +61,8 @@ public class GameSessionResponse
     public int YourPlayerId { get; set; }
     public bool CanCurrentUserAct { get; set; }
     public List<string> AvailableActions { get; set; } = [];
+    public string? TimerPhase { get; set; }
+    public DateTime? TimerExpiresAtUtc { get; set; }
     public List<GamePlayerStateResponse> Players { get; set; } = [];
     public CatanGameStateResponse? CatanState { get; set; }
 }

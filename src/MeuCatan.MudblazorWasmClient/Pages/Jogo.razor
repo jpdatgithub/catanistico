@@ -3,6 +3,7 @@
 
 @inject ClienteAuthService AuthService
 @inject HttpClient Http
+@inject AudioCueService AudioCueService
 @inject Microsoft.AspNetCore.Components.WebAssembly.Hosting.IWebAssemblyHostEnvironment HostEnvironment
 @using MeuCatan.MudblazorWasmClient.Components.Catan
 @using System.Text.Json
@@ -132,7 +133,9 @@
                                         <BuildActionPanel PlayerColor="@PlayerColorUtils.ToHex(currentPlayer.Cor)"
                                                           PlayerResources="@currentPlayer.Resources" Disabled="@(!PodeInteragirComRecursos)"
                                                           CanBuyDevelopmentCard="@PodeComprarCartaDesenvolvimento"
-                                                          ActiveBuildMode="@_buildMode"
+                                                          HasDevelopmentCardsAvailable="@TemCartasDesenvolvimentoDisponiveis"
+                                                          HasRoadTargets="@TemAlvosParaEstrada" HasCityTargets="@TemAlvosParaCidade"
+                                                          HasVillageTargets="@TemAlvosParaVilarejo" ActiveBuildMode="@_buildMode"
                                                           OnDevelopmentClicked="ExecutarCompraCartaDesenvolvimentoAsync"
                                                           OnRoadClicked="EntrarModoEstrada" OnCityClicked="EntrarModoCidade"
                                                           OnVillageClicked="EntrarModoVilarejo" />
@@ -239,6 +242,18 @@ StringComparison.OrdinalIgnoreCase)
     private bool PodeComprarCartaDesenvolvimento => !_carregando
         && !TemSelecaoRecursoCartaDesenvolvimento
         && _session?.AvailableActions.Contains(GameActionTypes.BuyDevelopmentCard) == true;
+
+    private bool TemCartasDesenvolvimentoDisponiveis =>
+        _session?.CatanState?.Bank?.DevelopmentCardCount > 0;
+
+    private bool TemAlvosParaEstrada => _session?.CatanState is { } state
+        && ComputeRoadTargets(state, _session.YourPlayerId).Count > 0;
+
+    private bool TemAlvosParaVilarejo => _session?.CatanState is { } state
+        && ComputeVillageTargets(state, _session.YourPlayerId).Count > 0;
+
+    private bool TemAlvosParaCidade => _session?.CatanState is { } state
+        && ComputeCityTargets(state, _session.YourPlayerId).Count > 0;
 
     private bool PodeJogarCavaleiro => !_carregando
         && !TemSelecaoRecursoCartaDesenvolvimento
@@ -612,7 +627,6 @@ true;
         }
 
         AtualizarSessionState(result.Data);
-        await FecharInterfaceTrocaAsync();
         HabilitarPollingRapidoTemporario();
     }
 
@@ -1130,6 +1144,8 @@ true;
 
     private void AtualizarSessionState(GameSessionResponse session)
     {
+        ReproduzirCuesDaTransicaoDeSessao(_session, session);
+
         if (_buildMode is not null)
         {
             var isInteractable = session.Phase == GameTipoFase.Turno
@@ -1222,6 +1238,53 @@ amount) == true
             _sessionDebugJson = SerializarDebug(session);
             _catanStateDebugJson = SerializarDebug(session.CatanState);
         }
+    }
+
+    private void ReproduzirCuesDaTransicaoDeSessao(GameSessionResponse? previousSession, GameSessionResponse session)
+    {
+        if (previousSession is null)
+        {
+            return;
+        }
+
+        var previousState = previousSession.CatanState;
+        var currentState = session.CatanState;
+        if (currentState is null)
+        {
+            return;
+        }
+
+        if (session.Phase == GameTipoFase.Turno
+            && session.CurrentPlayerId == session.YourPlayerId
+            && previousSession.CurrentPlayerId != session.CurrentPlayerId)
+        {
+            ReproduzirCue("sua-vez");
+        }
+
+        var previousLastRollAtUtc = previousState?.RollHistory.MaxBy(entry => entry.RolledAtUtc)?.RolledAtUtc;
+        var latestRoll = currentState.RollHistory.MaxBy(entry => entry.RolledAtUtc);
+        if (latestRoll is not null && latestRoll.RolledAtUtc != previousLastRollAtUtc)
+        {
+            ReproduzirCue("dados-rolados");
+
+            if (latestRoll.Total == 7)
+            {
+                ReproduzirCue("ladrao");
+            }
+        }
+
+        var previousOfferIds = previousState?.ActiveTradeOffers
+            .Select(offer => offer.OfferId)
+            .ToHashSet() ?? [];
+        if (currentState.ActiveTradeOffers.Any(offer => !previousOfferIds.Contains(offer.OfferId)))
+        {
+            ReproduzirCue("troca-proposta");
+        }
+    }
+
+    private void ReproduzirCue(string cueName)
+    {
+        _ = AudioCueService.PlayAsync(cueName).AsTask();
     }
 
     private void HabilitarPollingRapidoTemporario()

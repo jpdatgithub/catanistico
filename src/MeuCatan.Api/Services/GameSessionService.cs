@@ -12,6 +12,7 @@ public interface IGameSessionService
     void SetPlayerConnection(int salaId, int usuarioId, bool isConnected);
     void RemovePlayerFromSession(int salaId, int usuarioId);
     void DeleteSession(int salaId);
+    void ProcessExpiredTimers();
 }
 
 public sealed class CatanGameSessionService : IGameSessionService
@@ -108,6 +109,7 @@ public sealed class CatanGameSessionService : IGameSessionService
             {
                 SalaId = roomContext.SalaId,
                 GameType = roomContext.GameType,
+                TimerOptions = roomContext.TimerOptions,
                 Phase = GameTipoFase.SetupInicial,
                 SetupStepIndex = 0,
                 SetupTurnOrder = BuildSetupTurnOrder(orderedPlayers.Select(player => player.UsuarioId).ToList()),
@@ -134,6 +136,7 @@ public sealed class CatanGameSessionService : IGameSessionService
 
             InitializeDevelopmentDeck(session.Bank);
             session.CurrentPlayerId = session.SetupTurnOrder.First();
+            StartTimer(session, GameTimerPhases.InitialSettlement, session.TimerOptions.InitialSettlementSeconds);
             store.Save(session);
             _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(session.SalaId, "session-created");
 
@@ -164,6 +167,12 @@ public sealed class CatanGameSessionService : IGameSessionService
 
             EnsureBankInitialized(session);
             EnsurePendingDiscardStateInitialized(session);
+
+            if (TryProcessExpiredTimer(session, DateTime.UtcNow))
+            {
+                store.Save(session);
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "timer-expired");
+            }
 
             if (RemoveExpiredTradeOffers(session, DateTime.UtcNow))
             {
@@ -201,6 +210,12 @@ public sealed class CatanGameSessionService : IGameSessionService
 
             EnsureBankInitialized(session);
             EnsurePendingDiscardStateInitialized(session);
+
+            if (TryProcessExpiredTimer(session, DateTime.UtcNow))
+            {
+                store.Save(session);
+                _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "timer-expired");
+            }
 
             RemoveExpiredTradeOffers(session, DateTime.UtcNow);
 
@@ -517,12 +532,17 @@ public sealed class CatanGameSessionService : IGameSessionService
                 {
                     AdvanceToNextConnectedPlayer(session);
                     session.HasRolledDiceThisTurn = false;
+                    if (!HasAnyPendingDiscards(session) && !IsRobberResolutionPending(session))
+                    {
+                        StartTimer(session, GameTimerPhases.DiceRoll, session.TimerOptions.DiceRollSeconds);
+                    }
                 }
             }
             else if (session.Phase == GameTipoFase.Turno && session.Players.All(item => !item.IsConnected || item.UsuarioId == usuarioId))
             {
                 session.CurrentPlayerId = usuarioId;
                 session.HasRolledDiceThisTurn = false;
+                StartTimer(session, GameTimerPhases.DiceRoll, session.TimerOptions.DiceRollSeconds);
             }
 
             store.Save(session);
@@ -577,6 +597,10 @@ public sealed class CatanGameSessionService : IGameSessionService
                     ?? session.Players[0].UsuarioId;
                 session.HasRolledDiceThisTurn = false;
                 ResetRobberResolution(session);
+                if (session.Phase == GameTipoFase.Turno)
+                {
+                    StartTimer(session, GameTimerPhases.DiceRoll, session.TimerOptions.DiceRollSeconds);
+                }
             }
 
             store.Save(session);
@@ -589,6 +613,176 @@ public sealed class CatanGameSessionService : IGameSessionService
     {
         _sessionStore.Write(store => store.Remove(salaId));
         _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "session-removed");
+    }
+
+    public void ProcessExpiredTimers()
+    {
+        var expiredSessionIds = _sessionStore.Write(store =>
+        {
+            var nowUtc = DateTime.UtcNow;
+            var updatedIds = new List<int>();
+
+            foreach (var salaId in store.SessionIds)
+            {
+                var session = store.GetSessionOrDefault(salaId);
+                if (session is null || !TryProcessExpiredTimer(session, nowUtc))
+                {
+                    continue;
+                }
+
+                store.Save(session);
+                updatedIds.Add(salaId);
+            }
+
+            return updatedIds;
+        });
+
+        foreach (var salaId in expiredSessionIds)
+        {
+            _ = _gameStateEventPublisher.PublishGameStateInvalidationAsync(salaId, "timer-expired");
+        }
+    }
+
+    private static bool TryProcessExpiredTimer(CatanGameSessionState session, DateTime nowUtc)
+    {
+        if (session.Phase is not (GameTipoFase.SetupInicial or GameTipoFase.Turno)
+            || session.TimerExpiresAtUtc is null
+            || session.TimerExpiresAtUtc.Value > nowUtc)
+        {
+            return false;
+        }
+
+        if (string.Equals(session.TimerPhase, GameTimerPhases.InitialSettlement, StringComparison.Ordinal))
+        {
+            return AutoPlaceInitialSettlement(session);
+        }
+
+        if (string.Equals(session.TimerPhase, GameTimerPhases.InitialRoad, StringComparison.Ordinal))
+        {
+            return AutoPlaceInitialRoad(session);
+        }
+
+        if (string.Equals(session.TimerPhase, GameTimerPhases.DiceRoll, StringComparison.Ordinal))
+        {
+            return TryRollDice(session) is null;
+        }
+
+        if (string.Equals(session.TimerPhase, GameTimerPhases.Turn, StringComparison.Ordinal))
+        {
+            session.PendingRoadBuilderRoads = 0;
+            return TryEndTurn(session) is null;
+        }
+
+        if (string.Equals(session.TimerPhase, GameTimerPhases.Discard, StringComparison.Ordinal))
+        {
+            AutoDiscardPendingResources(session);
+            return true;
+        }
+
+        if (string.Equals(session.TimerPhase, GameTimerPhases.Robber, StringComparison.Ordinal))
+        {
+            AutoResolveRobber(session);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool AutoPlaceInitialSettlement(CatanGameSessionState session)
+    {
+        var player = session.Players.FirstOrDefault(item => item.UsuarioId == session.CurrentPlayerId);
+        var candidates = session.Board.Vertices
+            .Where(vertex => ValidateInitialSettlementPlacement(session, vertex.VertexId) is null)
+            .ToList();
+        if (player is null || candidates.Count == 0)
+        {
+            return false;
+        }
+
+        return TryPlaceInitialSettlement(session, player, player.UsuarioId,
+            candidates[Random.Shared.Next(candidates.Count)].VertexId) is null;
+    }
+
+    private static bool AutoPlaceInitialRoad(CatanGameSessionState session)
+    {
+        var player = session.Players.FirstOrDefault(item => item.UsuarioId == session.CurrentPlayerId);
+        if (player is null || session.PendingInitialRoadFromVertexId is null)
+        {
+            return false;
+        }
+
+        var settlementVertexId = session.PendingInitialRoadFromVertexId.Value;
+        var candidates = session.Board.Edges
+            .Where(edge => edge.OwnerPlayerId is null
+                && (edge.EdgeKey.smallerVertexId == settlementVertexId || edge.EdgeKey.biggerVertexId == settlementVertexId))
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return false;
+        }
+
+        var edge = candidates[Random.Shared.Next(candidates.Count)];
+        return TryPlaceInitialRoad(session, player, player.UsuarioId,
+            edge.EdgeKey.smallerVertexId, edge.EdgeKey.biggerVertexId) is null;
+    }
+
+    private static void AutoDiscardPendingResources(CatanGameSessionState session)
+    {
+        foreach (var pending in session.PendingDiscardByPlayerId.ToList())
+        {
+            var player = session.Players.FirstOrDefault(item => item.UsuarioId == pending.Key);
+            if (player is null)
+            {
+                session.PendingDiscardByPlayerId.Remove(pending.Key);
+                continue;
+            }
+
+            var cards = ExpandPlayerResources(player.Resources);
+            var selected = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (var count = 0; count < pending.Value && cards.Count > 0; count++)
+            {
+                var cardIndex = Random.Shared.Next(cards.Count);
+                var resourceType = cards[cardIndex];
+                cards.RemoveAt(cardIndex);
+                selected[resourceType] = selected.GetValueOrDefault(resourceType) + 1;
+            }
+
+            _ = TryDiscardResources(session, player, selected);
+        }
+
+        if (!HasAnyPendingDiscards(session))
+        {
+            session.AwaitingRobberPlacement = true;
+            StartRobberTimer(session);
+        }
+    }
+
+    private static void AutoResolveRobber(CatanGameSessionState session)
+    {
+        var currentPlayer = session.Players.First(player => player.UsuarioId == session.CurrentPlayerId);
+
+        if (session.AwaitingRobberPlacement)
+        {
+            var safeTiles = session.Board.Tiles
+                .Where(tile => tile.TileId != session.Board.RobberTileId)
+                .Where(tile => !GetVerticesAdjacentToTile(session.Board, tile).Any(vertex =>
+                    vertex.OwnerPlayerId == currentPlayer.UsuarioId
+                    && (string.Equals(vertex.BuildingType, SettlementBuildingType, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(vertex.BuildingType, CityBuildingType, StringComparison.OrdinalIgnoreCase))))
+                .ToList();
+
+            if (safeTiles.Count > 0)
+            {
+                var targetTile = safeTiles[Random.Shared.Next(safeTiles.Count)];
+                _ = TryMoveRobber(session, currentPlayer, targetTile.TileId);
+            }
+        }
+
+        if (session.PendingRobberVictimPlayerIds.Count > 1)
+        {
+            var victimId = session.PendingRobberVictimPlayerIds[Random.Shared.Next(session.PendingRobberVictimPlayerIds.Count)];
+            _ = TryChooseRobberVictim(session, currentPlayer, victimId);
+        }
     }
 
     private static LobbyOperationResult<GameSessionResponse>? TryPlaceInitialSettlement(
@@ -613,6 +807,7 @@ public sealed class CatanGameSessionService : IGameSessionService
         session.LastPlacedSettlementVertexId = vertex.VertexId;
         session.AwaitingInitialRoadPlacement = true;
         session.PendingInitialRoadFromVertexId = vertex.VertexId;
+        StartTimer(session, GameTimerPhases.InitialRoad, session.TimerOptions.InitialRoadSeconds);
 
         if (IsSecondSetupSettlementPlacement(session))
         {
@@ -704,10 +899,12 @@ public sealed class CatanGameSessionService : IGameSessionService
         {
             session.Phase = GameTipoFase.Turno;
             session.CurrentPlayerId = session.SetupTurnOrder.First();
+            StartTimer(session, GameTimerPhases.DiceRoll, session.TimerOptions.DiceRollSeconds);
         }
         else
         {
             session.CurrentPlayerId = session.SetupTurnOrder[session.SetupStepIndex];
+            StartTimer(session, GameTimerPhases.InitialSettlement, session.TimerOptions.InitialSettlementSeconds);
         }
 
         return null;
@@ -747,11 +944,17 @@ public sealed class CatanGameSessionService : IGameSessionService
             if (!HasAnyPendingDiscards(session))
             {
                 session.AwaitingRobberPlacement = true;
+                StartRobberTimer(session);
+            }
+            else
+            {
+                StartTimer(session, GameTimerPhases.Discard, session.TimerOptions.DiscardSeconds);
             }
         }
         else
         {
             DistributeResourcesForRoll(session, rolledTotal);
+            StartTimer(session, GameTimerPhases.Turn, session.TimerOptions.TurnSeconds);
         }
 
         var resourceGains = session.LastRollResourceGains
@@ -808,6 +1011,8 @@ public sealed class CatanGameSessionService : IGameSessionService
         session.DevelopmentCardsPlayedThisTurn = 0;
         session.DevelopmentCardsPurchasedThisTurn = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         ResetRobberResolution(session);
+        session.PausedTurnRemainingSeconds = null;
+        StartTimer(session, GameTimerPhases.DiceRoll, session.TimerOptions.DiceRollSeconds);
 
         return null;
     }
@@ -901,6 +1106,7 @@ public sealed class CatanGameSessionService : IGameSessionService
         session.AwaitingRobberPlacement = true;
         session.PendingRobberTileId = null;
         session.PendingRobberVictimPlayerIds.Clear();
+        StartRobberTimer(session);
 
         return null;
     }
@@ -1633,6 +1839,12 @@ public sealed class CatanGameSessionService : IGameSessionService
             session.PlayerTradeHistory.RemoveAt(0);
         }
 
+        if (string.Equals(session.TimerPhase, GameTimerPhases.Turn, StringComparison.Ordinal)
+            && session.TimerExpiresAtUtc is not null)
+        {
+            session.TimerExpiresAtUtc = session.TimerExpiresAtUtc.Value.AddSeconds(session.TimerOptions.TradeBonusSeconds);
+        }
+
         session.ActiveTradeOffers.Remove(offer);
         return null;
     }
@@ -1873,6 +2085,7 @@ public sealed class CatanGameSessionService : IGameSessionService
         if (!HasAnyPendingDiscards(session) && WasSevenRolledThisTurn(session))
         {
             session.AwaitingRobberPlacement = true;
+            StartRobberTimer(session);
         }
 
         return null;
@@ -1914,6 +2127,7 @@ public sealed class CatanGameSessionService : IGameSessionService
         {
             session.PendingRobberTileId = null;
             session.PendingRobberVictimPlayerIds.Clear();
+            CompleteRobberResolutionTimer(session);
             return null;
         }
 
@@ -1986,8 +2200,35 @@ public sealed class CatanGameSessionService : IGameSessionService
         session.PendingRobberTileId = null;
         session.PendingRobberVictimPlayerIds.Clear();
         session.AwaitingRobberPlacement = false;
+        CompleteRobberResolutionTimer(session);
 
         return null;
+    }
+
+    private static void StartRobberTimer(CatanGameSessionState session)
+    {
+        if (string.Equals(session.TimerPhase, GameTimerPhases.Turn, StringComparison.Ordinal)
+            && session.TimerExpiresAtUtc is not null)
+        {
+            session.PausedTurnRemainingSeconds = Math.Max(
+                1,
+                (int)Math.Ceiling((session.TimerExpiresAtUtc.Value - DateTime.UtcNow).TotalSeconds));
+        }
+
+        StartTimer(session, GameTimerPhases.Robber, session.TimerOptions.RobberPlacementSeconds);
+    }
+
+    private static void CompleteRobberResolutionTimer(CatanGameSessionState session)
+    {
+        var remainingSeconds = session.PausedTurnRemainingSeconds ?? session.TimerOptions.TurnSeconds;
+        session.PausedTurnRemainingSeconds = null;
+        StartTimer(session, GameTimerPhases.Turn, remainingSeconds);
+    }
+
+    private static void StartTimer(CatanGameSessionState session, string phase, int seconds)
+    {
+        session.TimerPhase = phase;
+        session.TimerExpiresAtUtc = DateTime.UtcNow.AddSeconds(Math.Max(1, seconds));
     }
 
     private static List<string> ExpandPlayerResources(IReadOnlyDictionary<string, int>? resources)
@@ -2685,6 +2926,8 @@ public sealed class CatanGameSessionService : IGameSessionService
             YourPlayerId = usuarioId,
             CanCurrentUserAct = canCurrentUserAct,
             AvailableActions = availableActions,
+            TimerPhase = session.TimerPhase,
+            TimerExpiresAtUtc = session.TimerExpiresAtUtc,
             Players = session.Players
                 .Select(player => new GamePlayerStateResponse
                 {
@@ -2862,6 +3105,7 @@ public sealed class RoomGameStartContext
     public int SalaId { get; set; }
     public string GameType { get; set; } = LobbyTipoJogo.CatanBase;
     public int CriadorId { get; set; }
+    public CatanTimerOptions TimerOptions { get; set; } = new();
     public List<RoomGameStartPlayer> Players { get; set; } = [];
 }
 

@@ -107,6 +107,18 @@
     public bool CanBuyDevelopmentCard { get; set; }
 
     [Parameter]
+    public bool HasDevelopmentCardsAvailable { get; set; }
+
+    [Parameter]
+    public bool HasRoadTargets { get; set; }
+
+    [Parameter]
+    public bool HasCityTargets { get; set; }
+
+    [Parameter]
+    public bool HasVillageTargets { get; set; }
+
+    [Parameter]
     public string? ActiveBuildMode { get; set; }
 
     [Parameter]
@@ -121,13 +133,15 @@
     [Parameter]
     public EventCallback OnVillageClicked { get; set; }
 
-    private bool IsDevelopmentDisabled => !CanBuyDevelopmentCard || IsActionDisabled(DevelopmentCost);
+    private bool IsDevelopmentDisabled => !CanBuyDevelopmentCard
+        || !HasDevelopmentCardsAvailable
+        || IsActionDisabled(DevelopmentCost);
 
-    private bool IsRoadDisabled => IsActionDisabled(RoadCost);
+    private bool IsRoadDisabled => !HasRoadTargets || IsActionDisabled(RoadCost);
 
-    private bool IsVillageDisabled => IsActionDisabled(VillageCost);
+    private bool IsVillageDisabled => !HasVillageTargets || IsActionDisabled(VillageCost);
 
-    private bool IsCityDisabled => IsActionDisabled(CityCost);
+    private bool IsCityDisabled => !HasCityTargets || IsActionDisabled(CityCost);
 
     private Task HandleDevelopmentClick()
         => IsDevelopmentDisabled ? Task.CompletedTask : OnDevelopmentClicked.InvokeAsync();
